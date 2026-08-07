@@ -137,7 +137,8 @@ export function useCreateVideoAsset() {
       if (error) throw error;
       return data as unknown as VideoAssetRecord;
     },
-    onSuccess: (asset) => {
+    onSuccess: async (asset) => {
+      await syncGameVideoStatus(asset.game_id);
       queryClient.invalidateQueries({ queryKey: ["video-assets"] });
       queryClient.invalidateQueries({ queryKey: ["games"] });
       queryClient.invalidateQueries({ queryKey: ["game", asset.game_id] });
@@ -169,10 +170,21 @@ export function useUpdateVideoAsset() {
         >
       >;
     }) => {
-      const { error } = await supabase.from("video_assets").update(patch).eq("id", id);
+      const { data, error } = await supabase
+        .from("video_assets")
+        .update(patch)
+        .eq("id", id)
+        .select("game_id")
+        .single();
       if (error) throw error;
+      return data.game_id as string;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["video-assets"] }),
+    onSuccess: async (gameId) => {
+      await syncGameVideoStatus(gameId);
+      queryClient.invalidateQueries({ queryKey: ["video-assets"] });
+      queryClient.invalidateQueries({ queryKey: ["games"] });
+      queryClient.invalidateQueries({ queryKey: ["game", gameId] });
+    },
   });
 }
 
@@ -180,15 +192,23 @@ export function useDeleteVideoAsset() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (asset: Pick<VideoAssetRecord, "id" | "storage_path">) => {
+      const { data: existing } = await supabase
+        .from("video_assets")
+        .select("game_id")
+        .eq("id", asset.id)
+        .maybeSingle();
       if (asset.storage_path) {
         await supabase.storage.from(FILM_BUCKET).remove([asset.storage_path]);
       }
       const { error } = await supabase.from("video_assets").delete().eq("id", asset.id);
       if (error) throw error;
+      return (existing?.game_id as string | undefined) ?? null;
     },
-    onSuccess: () => {
+    onSuccess: async (gameId) => {
+      if (gameId) await syncGameVideoStatus(gameId);
       queryClient.invalidateQueries({ queryKey: ["video-assets"] });
       queryClient.invalidateQueries({ queryKey: ["clips"] });
+      queryClient.invalidateQueries({ queryKey: ["games"] });
     },
   });
 }
