@@ -7,6 +7,7 @@ import { ClipCard } from "@/components/common/clip-card";
 import { DemoNotice } from "@/components/common/demo-badge";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
+import { SharedWithMe } from "@/components/sharing/shared-with-me";
 import { SectionCard } from "@/components/common/stat-card";
 import { Tag } from "@/components/common/status-badge";
 import { VideoPlaceholder } from "@/components/common/video-placeholder";
@@ -101,6 +102,8 @@ function FilmRoom() {
           description="Playlists build themselves from the plays you mark on each game."
         />
 
+        <SharedWithMe />
+
         <div className="grid gap-6 lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)]">
           <SectionCard title="Playlists" description={`${playlists.length} auto-generated`}>
             <ul className="space-y-1.5">
@@ -178,6 +181,8 @@ function FilmRoom() {
         title="Film Room"
         description="Playlists are generated automatically from each game's tagged events."
       />
+
+      <SharedWithMe />
 
       <DemoNotice>Sample playlists preview how your film room will be organized.</DemoNotice>
 

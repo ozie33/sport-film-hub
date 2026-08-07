@@ -10,6 +10,7 @@ import { SectionCard, StatCard } from "@/components/common/stat-card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AddFilmPanel } from "@/components/video/add-film-panel";
+import { ShareWithPlayerDialog } from "@/components/sharing/share-with-player-dialog";
 import { FilmPlayer } from "@/components/video/film-player";
 import { FilmSourceList } from "@/components/video/film-source-list";
 import { MarkPlayPanel } from "@/components/video/mark-play-panel";
@@ -135,6 +136,11 @@ function GameDetail() {
           <div className="flex items-center gap-2">
             <StatusBadge status={game.video_status} />
             <StatusBadge status={game.analysis_status} />
+            <ShareWithPlayerDialog
+              resourceType="game"
+              resourceId={game.id}
+              resourceName={game.title}
+            />
           </div>
         }
       />

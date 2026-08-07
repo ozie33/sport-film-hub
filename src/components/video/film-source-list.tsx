@@ -56,6 +56,7 @@ export function FilmSourceList({
                 <IngestionBadge status={asset.ingestion_status} />
                 <AccessLevelTag accessLevel={asset.access_level} />
                 {asset.is_primary ? <Tag>Primary</Tag> : null}
+                <Tag>{storageLabel(asset.provider)}</Tag>
               </div>
               <p className="mt-1.5 text-xs text-muted-foreground">
                 {[
@@ -103,4 +104,19 @@ export function FilmSourceList({
       ))}
     </ul>
   );
+}
+/** Where the original file actually lives — never implied, always stated. */
+function storageLabel(provider: string): string {
+  switch (provider) {
+    case "upload":
+      return "In app storage";
+    case "google_drive":
+      return "In your Google Drive";
+    case "youtube":
+      return "On YouTube";
+    case "hudl":
+      return "On Hudl";
+    default:
+      return "With provider";
+  }
 }

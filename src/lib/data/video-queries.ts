@@ -9,6 +9,16 @@ import type {
 
 export const FILM_BUCKET = "game-film";
 
+/** Where the original file actually lives — the app never assumes "here". */
+export type SourcePermissionState =
+  | "unknown"
+  | "owner"
+  | "shared"
+  | "no_access"
+  | "not_applicable";
+
+export type CleanupState = "not_required" | "pending" | "in_progress" | "done" | "failed";
+
 /* ------------------------------ video assets ----------------------------- */
 
 export type VideoAssetRecord = {
@@ -37,10 +47,15 @@ export type VideoAssetRecord = {
   provider_metadata: Record<string, unknown>;
   rights_confirmed_at: string | null;
   created_at: string;
+  provider_connection_id: string | null;
+  permissions_status: SourcePermissionState;
+  is_temporary: boolean;
+  expires_at: string | null;
+  cleanup_status: CleanupState;
 };
 
 const VIDEO_ASSET_COLUMNS =
-  "id, game_id, label, source_type, provider, access_level, external_video_id, external_url, embed_url, playback_url, storage_path, original_filename, mime_type, file_size, duration, width, height, thumbnail_url, ingestion_status, processing_status, is_primary, error, provider_metadata, rights_confirmed_at, created_at";
+  "id, game_id, label, source_type, provider, access_level, external_video_id, external_url, embed_url, playback_url, storage_path, original_filename, mime_type, file_size, duration, width, height, thumbnail_url, ingestion_status, processing_status, is_primary, error, provider_metadata, rights_confirmed_at, created_at, provider_connection_id, permissions_status, is_temporary, expires_at, cleanup_status";
 
 /**
  * The game row carries the headline film status shown on cards and detail
@@ -97,7 +112,7 @@ export function useAllVideoAssets() {
 export type VideoAssetInput = {
   game_id: string;
   label: string;
-  source_type: "file" | "external_link";
+  source_type: "file" | "external_link" | "provider_file";
   provider: VideoProviderKey;
   access_level: ProviderAccessLevel;
   external_video_id?: string | null;
@@ -116,6 +131,11 @@ export type VideoAssetInput = {
   is_primary?: boolean;
   provider_metadata?: Record<string, unknown>;
   rights_confirmed: boolean;
+  provider_connection_id?: string | null;
+  permissions_status?: SourcePermissionState;
+  is_temporary?: boolean;
+  expires_at?: string | null;
+  cleanup_status?: CleanupState;
 };
 
 export function useCreateVideoAsset() {
@@ -225,6 +245,24 @@ export function useSignedFilmUrl(storagePath: string | null | undefined) {
         .createSignedUrl(storagePath!, 60 * 60);
       if (error) throw error;
       return data?.signedUrl ?? null;
+    },
+  });
+}
+
+/**
+ * Token-authorized stream URL for Google Drive film. The Drive credential
+ * never leaves the server; this is only a short-lived app URL.
+ */
+export function useDrivePlaybackUrl(assetId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["drive-playback-url", assetId],
+    enabled: Boolean(assetId),
+    staleTime: 60 * 60 * 1000,
+    retry: false,
+    queryFn: async (): Promise<string | null> => {
+      const { getDrivePlaybackUrl } = await import("@/lib/drive/drive.functions");
+      const result = await getDrivePlaybackUrl({ data: { assetId: assetId! } });
+      return result.url;
     },
   });
 }

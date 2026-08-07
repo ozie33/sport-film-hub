@@ -16,13 +16,15 @@ import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedDevelopmentRouteImport } from './routes/_authenticated/development'
 import { Route as AuthenticatedFilmRoomRouteImport } from './routes/_authenticated/film-room'
-import { Route as AuthenticatedGamesRouteImport } from './routes/_authenticated/games'
 import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authenticated/onboarding'
-import { Route as AuthenticatedPlayersRouteImport } from './routes/_authenticated/players'
 import { Route as AuthenticatedReelsRouteImport } from './routes/_authenticated/reels'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
+import { Route as AuthenticatedGamesIndexRouteImport } from './routes/_authenticated/games.index'
 import { Route as AuthenticatedGamesGameIdRouteImport } from './routes/_authenticated/games.$gameId'
+import { Route as AuthenticatedPlayersIndexRouteImport } from './routes/_authenticated/players.index'
 import { Route as AuthenticatedPlayersPlayerIdRouteImport } from './routes/_authenticated/players.$playerId'
+import { Route as OauthGoogleDriveReturnRouteImport } from './routes/oauth/google-drive.return'
+import { Route as ApiPublicDriveStreamAssetIdRouteImport } from './routes/api/public/drive-stream.$assetId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -59,19 +61,9 @@ const AuthenticatedFilmRoomRoute = AuthenticatedFilmRoomRouteImport.update({
   path: '/film-room',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedGamesRoute = AuthenticatedGamesRouteImport.update({
-  id: '/games',
-  path: '/games',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
 const AuthenticatedOnboardingRoute = AuthenticatedOnboardingRouteImport.update({
   id: '/onboarding',
   path: '/onboarding',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedPlayersRoute = AuthenticatedPlayersRouteImport.update({
-  id: '/players',
-  path: '/players',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedReelsRoute = AuthenticatedReelsRouteImport.update({
@@ -84,17 +76,39 @@ const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedGamesIndexRoute = AuthenticatedGamesIndexRouteImport.update({
+  id: '/games/',
+  path: '/games/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedGamesGameIdRoute =
   AuthenticatedGamesGameIdRouteImport.update({
-    id: '/$gameId',
-    path: '/$gameId',
-    getParentRoute: () => AuthenticatedGamesRoute,
+    id: '/games/$gameId',
+    path: '/games/$gameId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedPlayersIndexRoute =
+  AuthenticatedPlayersIndexRouteImport.update({
+    id: '/players/',
+    path: '/players/',
+    getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedPlayersPlayerIdRoute =
   AuthenticatedPlayersPlayerIdRouteImport.update({
-    id: '/$playerId',
-    path: '/$playerId',
-    getParentRoute: () => AuthenticatedPlayersRoute,
+    id: '/players/$playerId',
+    path: '/players/$playerId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const OauthGoogleDriveReturnRoute = OauthGoogleDriveReturnRouteImport.update({
+  id: '/oauth/google-drive/return',
+  path: '/oauth/google-drive/return',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicDriveStreamAssetIdRoute =
+  ApiPublicDriveStreamAssetIdRouteImport.update({
+    id: '/api/public/drive-stream/$assetId',
+    path: '/api/public/drive-stream/$assetId',
+    getParentRoute: () => rootRouteImport,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -104,13 +118,15 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/development': typeof AuthenticatedDevelopmentRoute
   '/film-room': typeof AuthenticatedFilmRoomRoute
-  '/games': typeof AuthenticatedGamesRouteWithChildren
   '/onboarding': typeof AuthenticatedOnboardingRoute
-  '/players': typeof AuthenticatedPlayersRouteWithChildren
   '/reels': typeof AuthenticatedReelsRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/games/$gameId': typeof AuthenticatedGamesGameIdRoute
   '/players/$playerId': typeof AuthenticatedPlayersPlayerIdRoute
+  '/oauth/google-drive/return': typeof OauthGoogleDriveReturnRoute
+  '/games/': typeof AuthenticatedGamesIndexRoute
+  '/players/': typeof AuthenticatedPlayersIndexRoute
+  '/api/public/drive-stream/$assetId': typeof ApiPublicDriveStreamAssetIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -119,13 +135,15 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/development': typeof AuthenticatedDevelopmentRoute
   '/film-room': typeof AuthenticatedFilmRoomRoute
-  '/games': typeof AuthenticatedGamesRouteWithChildren
   '/onboarding': typeof AuthenticatedOnboardingRoute
-  '/players': typeof AuthenticatedPlayersRouteWithChildren
   '/reels': typeof AuthenticatedReelsRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/games/$gameId': typeof AuthenticatedGamesGameIdRoute
   '/players/$playerId': typeof AuthenticatedPlayersPlayerIdRoute
+  '/oauth/google-drive/return': typeof OauthGoogleDriveReturnRoute
+  '/games': typeof AuthenticatedGamesIndexRoute
+  '/players': typeof AuthenticatedPlayersIndexRoute
+  '/api/public/drive-stream/$assetId': typeof ApiPublicDriveStreamAssetIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -136,13 +154,15 @@ export interface FileRoutesById {
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/development': typeof AuthenticatedDevelopmentRoute
   '/_authenticated/film-room': typeof AuthenticatedFilmRoomRoute
-  '/_authenticated/games': typeof AuthenticatedGamesRouteWithChildren
   '/_authenticated/onboarding': typeof AuthenticatedOnboardingRoute
-  '/_authenticated/players': typeof AuthenticatedPlayersRouteWithChildren
   '/_authenticated/reels': typeof AuthenticatedReelsRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/games/$gameId': typeof AuthenticatedGamesGameIdRoute
   '/_authenticated/players/$playerId': typeof AuthenticatedPlayersPlayerIdRoute
+  '/oauth/google-drive/return': typeof OauthGoogleDriveReturnRoute
+  '/_authenticated/games/': typeof AuthenticatedGamesIndexRoute
+  '/_authenticated/players/': typeof AuthenticatedPlayersIndexRoute
+  '/api/public/drive-stream/$assetId': typeof ApiPublicDriveStreamAssetIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -153,13 +173,15 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/development'
     | '/film-room'
-    | '/games'
     | '/onboarding'
-    | '/players'
     | '/reels'
     | '/settings'
     | '/games/$gameId'
     | '/players/$playerId'
+    | '/oauth/google-drive/return'
+    | '/games/'
+    | '/players/'
+    | '/api/public/drive-stream/$assetId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -168,13 +190,15 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/development'
     | '/film-room'
-    | '/games'
     | '/onboarding'
-    | '/players'
     | '/reels'
     | '/settings'
     | '/games/$gameId'
     | '/players/$playerId'
+    | '/oauth/google-drive/return'
+    | '/games'
+    | '/players'
+    | '/api/public/drive-stream/$assetId'
   id:
     | '__root__'
     | '/'
@@ -184,13 +208,15 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard'
     | '/_authenticated/development'
     | '/_authenticated/film-room'
-    | '/_authenticated/games'
     | '/_authenticated/onboarding'
-    | '/_authenticated/players'
     | '/_authenticated/reels'
     | '/_authenticated/settings'
     | '/_authenticated/games/$gameId'
     | '/_authenticated/players/$playerId'
+    | '/oauth/google-drive/return'
+    | '/_authenticated/games/'
+    | '/_authenticated/players/'
+    | '/api/public/drive-stream/$assetId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -198,6 +224,8 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  OauthGoogleDriveReturnRoute: typeof OauthGoogleDriveReturnRoute
+  ApiPublicDriveStreamAssetIdRoute: typeof ApiPublicDriveStreamAssetIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -251,25 +279,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedFilmRoomRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/games': {
-      id: '/_authenticated/games'
-      path: '/games'
-      fullPath: '/games'
-      preLoaderRoute: typeof AuthenticatedGamesRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/onboarding': {
       id: '/_authenticated/onboarding'
       path: '/onboarding'
       fullPath: '/onboarding'
       preLoaderRoute: typeof AuthenticatedOnboardingRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/players': {
-      id: '/_authenticated/players'
-      path: '/players'
-      fullPath: '/players'
-      preLoaderRoute: typeof AuthenticatedPlayersRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/reels': {
@@ -286,65 +300,75 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/games/': {
+      id: '/_authenticated/games/'
+      path: '/games'
+      fullPath: '/games/'
+      preLoaderRoute: typeof AuthenticatedGamesIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/games/$gameId': {
       id: '/_authenticated/games/$gameId'
-      path: '/$gameId'
+      path: '/games/$gameId'
       fullPath: '/games/$gameId'
       preLoaderRoute: typeof AuthenticatedGamesGameIdRouteImport
-      parentRoute: typeof AuthenticatedGamesRoute
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/players/': {
+      id: '/_authenticated/players/'
+      path: '/players'
+      fullPath: '/players/'
+      preLoaderRoute: typeof AuthenticatedPlayersIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/players/$playerId': {
       id: '/_authenticated/players/$playerId'
-      path: '/$playerId'
+      path: '/players/$playerId'
       fullPath: '/players/$playerId'
       preLoaderRoute: typeof AuthenticatedPlayersPlayerIdRouteImport
-      parentRoute: typeof AuthenticatedPlayersRoute
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/oauth/google-drive/return': {
+      id: '/oauth/google-drive/return'
+      path: '/oauth/google-drive/return'
+      fullPath: '/oauth/google-drive/return'
+      preLoaderRoute: typeof OauthGoogleDriveReturnRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/drive-stream/$assetId': {
+      id: '/api/public/drive-stream/$assetId'
+      path: '/api/public/drive-stream/$assetId'
+      fullPath: '/api/public/drive-stream/$assetId'
+      preLoaderRoute: typeof ApiPublicDriveStreamAssetIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
   }
 }
-
-interface AuthenticatedGamesRouteChildren {
-  AuthenticatedGamesGameIdRoute: typeof AuthenticatedGamesGameIdRoute
-}
-
-const AuthenticatedGamesRouteChildren: AuthenticatedGamesRouteChildren = {
-  AuthenticatedGamesGameIdRoute: AuthenticatedGamesGameIdRoute,
-}
-
-const AuthenticatedGamesRouteWithChildren =
-  AuthenticatedGamesRoute._addFileChildren(AuthenticatedGamesRouteChildren)
-
-interface AuthenticatedPlayersRouteChildren {
-  AuthenticatedPlayersPlayerIdRoute: typeof AuthenticatedPlayersPlayerIdRoute
-}
-
-const AuthenticatedPlayersRouteChildren: AuthenticatedPlayersRouteChildren = {
-  AuthenticatedPlayersPlayerIdRoute: AuthenticatedPlayersPlayerIdRoute,
-}
-
-const AuthenticatedPlayersRouteWithChildren =
-  AuthenticatedPlayersRoute._addFileChildren(AuthenticatedPlayersRouteChildren)
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedDevelopmentRoute: typeof AuthenticatedDevelopmentRoute
   AuthenticatedFilmRoomRoute: typeof AuthenticatedFilmRoomRoute
-  AuthenticatedGamesRoute: typeof AuthenticatedGamesRouteWithChildren
   AuthenticatedOnboardingRoute: typeof AuthenticatedOnboardingRoute
-  AuthenticatedPlayersRoute: typeof AuthenticatedPlayersRouteWithChildren
   AuthenticatedReelsRoute: typeof AuthenticatedReelsRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
+  AuthenticatedGamesGameIdRoute: typeof AuthenticatedGamesGameIdRoute
+  AuthenticatedPlayersPlayerIdRoute: typeof AuthenticatedPlayersPlayerIdRoute
+  AuthenticatedGamesIndexRoute: typeof AuthenticatedGamesIndexRoute
+  AuthenticatedPlayersIndexRoute: typeof AuthenticatedPlayersIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedDevelopmentRoute: AuthenticatedDevelopmentRoute,
   AuthenticatedFilmRoomRoute: AuthenticatedFilmRoomRoute,
-  AuthenticatedGamesRoute: AuthenticatedGamesRouteWithChildren,
   AuthenticatedOnboardingRoute: AuthenticatedOnboardingRoute,
-  AuthenticatedPlayersRoute: AuthenticatedPlayersRouteWithChildren,
   AuthenticatedReelsRoute: AuthenticatedReelsRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
+  AuthenticatedGamesGameIdRoute: AuthenticatedGamesGameIdRoute,
+  AuthenticatedPlayersPlayerIdRoute: AuthenticatedPlayersPlayerIdRoute,
+  AuthenticatedGamesIndexRoute: AuthenticatedGamesIndexRoute,
+  AuthenticatedPlayersIndexRoute: AuthenticatedPlayersIndexRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
@@ -355,17 +379,9 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  OauthGoogleDriveReturnRoute: OauthGoogleDriveReturnRoute,
+  ApiPublicDriveStreamAssetIdRoute: ApiPublicDriveStreamAssetIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

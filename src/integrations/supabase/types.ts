@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_user_connections: {
+        Row: {
+          account_label: string | null
+          connection_key_ciphertext: string
+          connector_id: string
+          created_at: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_label?: string | null
+          connection_key_ciphertext: string
+          connector_id: string
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_label?: string | null
+          connection_key_ciphertext?: string
+          connector_id?: string
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       clips: {
         Row: {
           approved: boolean
@@ -852,6 +882,57 @@ export type Database = {
           },
         ]
       }
+      shared_resources: {
+        Row: {
+          created_at: string
+          id: string
+          metadata: Json
+          note: string | null
+          permission: Database["public"]["Enums"]["share_permission"]
+          resource_id: string
+          resource_type: Database["public"]["Enums"]["shared_resource_type"]
+          shared_by_user_id: string
+          shared_with_email: string | null
+          shared_with_user_id: string | null
+          source_access_state: Database["public"]["Enums"]["source_permission_state"]
+          status: Database["public"]["Enums"]["share_status"]
+          updated_at: string
+          viewed_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          metadata?: Json
+          note?: string | null
+          permission?: Database["public"]["Enums"]["share_permission"]
+          resource_id: string
+          resource_type: Database["public"]["Enums"]["shared_resource_type"]
+          shared_by_user_id: string
+          shared_with_email?: string | null
+          shared_with_user_id?: string | null
+          source_access_state?: Database["public"]["Enums"]["source_permission_state"]
+          status?: Database["public"]["Enums"]["share_status"]
+          updated_at?: string
+          viewed_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          metadata?: Json
+          note?: string | null
+          permission?: Database["public"]["Enums"]["share_permission"]
+          resource_id?: string
+          resource_type?: Database["public"]["Enums"]["shared_resource_type"]
+          shared_by_user_id?: string
+          shared_with_email?: string | null
+          shared_with_user_id?: string | null
+          source_access_state?: Database["public"]["Enums"]["source_permission_state"]
+          status?: Database["public"]["Enums"]["share_status"]
+          updated_at?: string
+          viewed_at?: string | null
+        }
+        Relationships: []
+      }
       sport_positions: {
         Row: {
           abbreviation: string | null
@@ -941,11 +1022,13 @@ export type Database = {
       video_assets: {
         Row: {
           access_level: Database["public"]["Enums"]["provider_access_level"]
+          cleanup_status: Database["public"]["Enums"]["cleanup_state"]
           created_at: string
           created_by: string | null
           duration: number | null
           embed_url: string | null
           error: string | null
+          expires_at: string | null
           external_url: string | null
           external_video_id: string | null
           file_size: number | null
@@ -954,12 +1037,15 @@ export type Database = {
           id: string
           ingestion_status: Database["public"]["Enums"]["video_ingestion_status"]
           is_primary: boolean
+          is_temporary: boolean
           label: string
           mime_type: string | null
           original_filename: string | null
+          permissions_status: Database["public"]["Enums"]["source_permission_state"]
           playback_url: string | null
           processing_status: Database["public"]["Enums"]["video_ingestion_status"]
           provider: Database["public"]["Enums"]["video_provider"]
+          provider_connection_id: string | null
           provider_metadata: Json
           rights_confirmed_at: string | null
           rights_confirmed_by: string | null
@@ -971,11 +1057,13 @@ export type Database = {
         }
         Insert: {
           access_level?: Database["public"]["Enums"]["provider_access_level"]
+          cleanup_status?: Database["public"]["Enums"]["cleanup_state"]
           created_at?: string
           created_by?: string | null
           duration?: number | null
           embed_url?: string | null
           error?: string | null
+          expires_at?: string | null
           external_url?: string | null
           external_video_id?: string | null
           file_size?: number | null
@@ -984,12 +1072,15 @@ export type Database = {
           id?: string
           ingestion_status?: Database["public"]["Enums"]["video_ingestion_status"]
           is_primary?: boolean
+          is_temporary?: boolean
           label?: string
           mime_type?: string | null
           original_filename?: string | null
+          permissions_status?: Database["public"]["Enums"]["source_permission_state"]
           playback_url?: string | null
           processing_status?: Database["public"]["Enums"]["video_ingestion_status"]
           provider: Database["public"]["Enums"]["video_provider"]
+          provider_connection_id?: string | null
           provider_metadata?: Json
           rights_confirmed_at?: string | null
           rights_confirmed_by?: string | null
@@ -1001,11 +1092,13 @@ export type Database = {
         }
         Update: {
           access_level?: Database["public"]["Enums"]["provider_access_level"]
+          cleanup_status?: Database["public"]["Enums"]["cleanup_state"]
           created_at?: string
           created_by?: string | null
           duration?: number | null
           embed_url?: string | null
           error?: string | null
+          expires_at?: string | null
           external_url?: string | null
           external_video_id?: string | null
           file_size?: number | null
@@ -1014,12 +1107,15 @@ export type Database = {
           id?: string
           ingestion_status?: Database["public"]["Enums"]["video_ingestion_status"]
           is_primary?: boolean
+          is_temporary?: boolean
           label?: string
           mime_type?: string | null
           original_filename?: string | null
+          permissions_status?: Database["public"]["Enums"]["source_permission_state"]
           playback_url?: string | null
           processing_status?: Database["public"]["Enums"]["video_ingestion_status"]
           provider?: Database["public"]["Enums"]["video_provider"]
+          provider_connection_id?: string | null
           provider_metadata?: Json
           rights_confirmed_at?: string | null
           rights_confirmed_by?: string | null
@@ -1035,6 +1131,13 @@ export type Database = {
             columns: ["game_id"]
             isOneToOne: false
             referencedRelation: "games"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "video_assets_provider_connection_id_fkey"
+            columns: ["provider_connection_id"]
+            isOneToOne: false
+            referencedRelation: "video_provider_connections"
             referencedColumns: ["id"]
           },
         ]
@@ -1121,6 +1224,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_view_clip: { Args: { _clip_id: string }; Returns: boolean }
+      can_view_game: { Args: { _game_id: string }; Returns: boolean }
+      can_view_playlist: { Args: { _playlist_id: string }; Returns: boolean }
+      has_resource_share: {
+        Args: {
+          _id: string
+          _type: Database["public"]["Enums"]["shared_resource_type"]
+        }
+        Returns: boolean
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -1130,9 +1243,19 @@ export type Database = {
       }
       owns_game: { Args: { _game_id: string }; Returns: boolean }
       owns_playlist: { Args: { _playlist_id: string }; Returns: boolean }
+      shares_identity_with: {
+        Args: { _other_user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       app_role: "athlete" | "parent" | "coach" | "trainer" | "admin"
+      cleanup_state:
+        | "not_required"
+        | "pending"
+        | "in_progress"
+        | "done"
+        | "failed"
       data_source: "manual" | "ai" | "ai_corrected"
       play_side: "offense" | "defense" | "neutral" | "special"
       provider_access_level:
@@ -1145,6 +1268,20 @@ export type Database = {
         | "not_connected"
         | "connected"
         | "needs_configuration"
+      share_permission: "view" | "comment"
+      share_status: "pending" | "active" | "revoked"
+      shared_resource_type:
+        | "game"
+        | "playlist"
+        | "film_review"
+        | "reel"
+        | "development_report"
+      source_permission_state:
+        | "unknown"
+        | "owner"
+        | "shared"
+        | "no_access"
+        | "not_applicable"
       video_ingestion_status:
         | "waiting"
         | "uploading"
@@ -1152,7 +1289,12 @@ export type Database = {
         | "processing"
         | "ready"
         | "failed"
-      video_provider: "upload" | "youtube" | "hudl" | "external"
+      video_provider:
+        | "upload"
+        | "youtube"
+        | "hudl"
+        | "external"
+        | "google_drive"
       workflow_status:
         | "upload_pending"
         | "uploaded"
@@ -1288,6 +1430,13 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["athlete", "parent", "coach", "trainer", "admin"],
+      cleanup_state: [
+        "not_required",
+        "pending",
+        "in_progress",
+        "done",
+        "failed",
+      ],
       data_source: ["manual", "ai", "ai_corrected"],
       play_side: ["offense", "defense", "neutral", "special"],
       provider_access_level: [
@@ -1302,6 +1451,22 @@ export const Constants = {
         "connected",
         "needs_configuration",
       ],
+      share_permission: ["view", "comment"],
+      share_status: ["pending", "active", "revoked"],
+      shared_resource_type: [
+        "game",
+        "playlist",
+        "film_review",
+        "reel",
+        "development_report",
+      ],
+      source_permission_state: [
+        "unknown",
+        "owner",
+        "shared",
+        "no_access",
+        "not_applicable",
+      ],
       video_ingestion_status: [
         "waiting",
         "uploading",
@@ -1310,7 +1475,7 @@ export const Constants = {
         "ready",
         "failed",
       ],
-      video_provider: ["upload", "youtube", "hudl", "external"],
+      video_provider: ["upload", "youtube", "hudl", "external", "google_drive"],
       workflow_status: [
         "upload_pending",
         "uploaded",
