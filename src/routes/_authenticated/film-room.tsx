@@ -13,6 +13,7 @@ import { Tag } from "@/components/common/status-badge";
 import { VideoPlaceholder } from "@/components/common/video-placeholder";
 import { Button } from "@/components/ui/button";
 import { PlayerCut } from "@/components/video/player-cut";
+import { clipSourceLabel } from "@/lib/analysis/analysis";
 import { useClips, type ClipRecord } from "@/lib/data/video-queries";
 import { useGames, useProfile } from "@/lib/data/queries";
 import { demoClips, demoPlaylists } from "@/lib/demo/demo-data";
@@ -89,8 +90,20 @@ function FilmRoom() {
   const demoMode = profile?.demo_mode ?? false;
   const [activeKey, setActiveKey] = useState(demoPlaylists[0]!.system_key);
   const [realKey, setRealKey] = useState("all");
+  const [sourceFilter, setSourceFilter] = useState<"all" | "ai" | "manual">("all");
 
-  const playlists = useMemo(() => buildPlaylists(realClips), [realClips]);
+  const filteredClips = useMemo(
+    () =>
+      realClips.filter((clip) => {
+        const isAi = clip.source === "ai" || clip.source === "ai_corrected";
+        if (sourceFilter === "ai") return isAi;
+        if (sourceFilter === "manual") return !isAi;
+        return true;
+      }),
+    [realClips, sourceFilter],
+  );
+
+  const playlists = useMemo(() => buildPlaylists(filteredClips), [filteredClips]);
 
   if (realClips.length > 0) {
     const active = playlists.find((playlist) => playlist.key === realKey) ?? playlists[0]!;
@@ -100,6 +113,26 @@ function FilmRoom() {
           eyebrow="Film Room"
           title="Film Room"
           description="Playlists build themselves from the plays you mark on each game."
+          actions={
+            <div className="flex flex-wrap gap-1.5">
+              {(
+                [
+                  { key: "all", label: "All clips" },
+                  { key: "ai", label: "AI verified" },
+                  { key: "manual", label: "Marked by me" },
+                ] as const
+              ).map((option) => (
+                <Button
+                  key={option.key}
+                  size="sm"
+                  variant={sourceFilter === option.key ? "default" : "outline"}
+                  onClick={() => setSourceFilter(option.key)}
+                >
+                  {option.label}
+                </Button>
+              ))}
+            </div>
+          }
         />
 
         <SharedWithMe />
@@ -134,6 +167,20 @@ function FilmRoom() {
               actions={<Tag>{active.clips.length} clips</Tag>}
             >
               <PlayerCut clips={active.clips} />
+            </SectionCard>
+
+            <SectionCard title="Clips in this playlist" description="Attribution stays visible">
+              <ul className="space-y-1.5">
+                {active.clips.map((clip) => (
+                  <li
+                    key={clip.id}
+                    className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm"
+                  >
+                    <span className="truncate">{clip.title ?? clip.category ?? "Clip"}</span>
+                    <Tag>{clipSourceLabel(clip.source, clip.approved)}</Tag>
+                  </li>
+                ))}
+              </ul>
             </SectionCard>
           </div>
         </div>
