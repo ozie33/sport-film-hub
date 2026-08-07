@@ -35,6 +35,7 @@ export type Database = {
           thumbnail_url: string | null
           title: string | null
           updated_at: string
+          video_asset_id: string | null
           video_id: string | null
         }
         Insert: {
@@ -57,6 +58,7 @@ export type Database = {
           thumbnail_url?: string | null
           title?: string | null
           updated_at?: string
+          video_asset_id?: string | null
           video_id?: string | null
         }
         Update: {
@@ -79,6 +81,7 @@ export type Database = {
           thumbnail_url?: string | null
           title?: string | null
           updated_at?: string
+          video_asset_id?: string | null
           video_id?: string | null
         }
         Relationships: [
@@ -101,6 +104,13 @@ export type Database = {
             columns: ["player_id"]
             isOneToOne: false
             referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clips_video_asset_id_fkey"
+            columns: ["video_asset_id"]
+            isOneToOne: false
+            referencedRelation: "video_assets"
             referencedColumns: ["id"]
           },
           {
@@ -278,6 +288,7 @@ export type Database = {
           start_time: number
           tags: string[]
           updated_at: string
+          video_asset_id: string | null
           video_id: string | null
         }
         Insert: {
@@ -306,6 +317,7 @@ export type Database = {
           start_time: number
           tags?: string[]
           updated_at?: string
+          video_asset_id?: string | null
           video_id?: string | null
         }
         Update: {
@@ -334,6 +346,7 @@ export type Database = {
           start_time?: number
           tags?: string[]
           updated_at?: string
+          video_asset_id?: string | null
           video_id?: string | null
         }
         Relationships: [
@@ -363,6 +376,13 @@ export type Database = {
             columns: ["sport_id"]
             isOneToOne: false
             referencedRelation: "sports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "events_video_asset_id_fkey"
+            columns: ["video_asset_id"]
+            isOneToOne: false
+            referencedRelation: "video_assets"
             referencedColumns: ["id"]
           },
           {
@@ -918,6 +938,184 @@ export type Database = {
         }
         Relationships: []
       }
+      video_assets: {
+        Row: {
+          access_level: Database["public"]["Enums"]["provider_access_level"]
+          created_at: string
+          created_by: string | null
+          duration: number | null
+          embed_url: string | null
+          error: string | null
+          external_url: string | null
+          external_video_id: string | null
+          file_size: number | null
+          game_id: string
+          height: number | null
+          id: string
+          ingestion_status: Database["public"]["Enums"]["video_ingestion_status"]
+          is_primary: boolean
+          label: string
+          mime_type: string | null
+          original_filename: string | null
+          playback_url: string | null
+          processing_status: Database["public"]["Enums"]["video_ingestion_status"]
+          provider: Database["public"]["Enums"]["video_provider"]
+          provider_metadata: Json
+          rights_confirmed_at: string | null
+          rights_confirmed_by: string | null
+          source_type: string
+          storage_path: string | null
+          thumbnail_url: string | null
+          updated_at: string
+          width: number | null
+        }
+        Insert: {
+          access_level?: Database["public"]["Enums"]["provider_access_level"]
+          created_at?: string
+          created_by?: string | null
+          duration?: number | null
+          embed_url?: string | null
+          error?: string | null
+          external_url?: string | null
+          external_video_id?: string | null
+          file_size?: number | null
+          game_id: string
+          height?: number | null
+          id?: string
+          ingestion_status?: Database["public"]["Enums"]["video_ingestion_status"]
+          is_primary?: boolean
+          label?: string
+          mime_type?: string | null
+          original_filename?: string | null
+          playback_url?: string | null
+          processing_status?: Database["public"]["Enums"]["video_ingestion_status"]
+          provider: Database["public"]["Enums"]["video_provider"]
+          provider_metadata?: Json
+          rights_confirmed_at?: string | null
+          rights_confirmed_by?: string | null
+          source_type?: string
+          storage_path?: string | null
+          thumbnail_url?: string | null
+          updated_at?: string
+          width?: number | null
+        }
+        Update: {
+          access_level?: Database["public"]["Enums"]["provider_access_level"]
+          created_at?: string
+          created_by?: string | null
+          duration?: number | null
+          embed_url?: string | null
+          error?: string | null
+          external_url?: string | null
+          external_video_id?: string | null
+          file_size?: number | null
+          game_id?: string
+          height?: number | null
+          id?: string
+          ingestion_status?: Database["public"]["Enums"]["video_ingestion_status"]
+          is_primary?: boolean
+          label?: string
+          mime_type?: string | null
+          original_filename?: string | null
+          playback_url?: string | null
+          processing_status?: Database["public"]["Enums"]["video_ingestion_status"]
+          provider?: Database["public"]["Enums"]["video_provider"]
+          provider_metadata?: Json
+          rights_confirmed_at?: string | null
+          rights_confirmed_by?: string | null
+          source_type?: string
+          storage_path?: string | null
+          thumbnail_url?: string | null
+          updated_at?: string
+          width?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "video_assets_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "games"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      video_provider_connections: {
+        Row: {
+          config: Json
+          connected_at: string | null
+          created_at: string
+          external_account_id: string | null
+          id: string
+          owner_id: string
+          provider: Database["public"]["Enums"]["video_provider"]
+          status: Database["public"]["Enums"]["provider_connection_status"]
+          updated_at: string
+        }
+        Insert: {
+          config?: Json
+          connected_at?: string | null
+          created_at?: string
+          external_account_id?: string | null
+          id?: string
+          owner_id?: string
+          provider: Database["public"]["Enums"]["video_provider"]
+          status?: Database["public"]["Enums"]["provider_connection_status"]
+          updated_at?: string
+        }
+        Update: {
+          config?: Json
+          connected_at?: string | null
+          created_at?: string
+          external_account_id?: string | null
+          id?: string
+          owner_id?: string
+          provider?: Database["public"]["Enums"]["video_provider"]
+          status?: Database["public"]["Enums"]["provider_connection_status"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      video_source_metadata: {
+        Row: {
+          created_at: string
+          id: string
+          key: string
+          retrieved_at: string
+          retrieved_from: string | null
+          updated_at: string
+          value: Json
+          video_asset_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          key: string
+          retrieved_at?: string
+          retrieved_from?: string | null
+          updated_at?: string
+          value?: Json
+          video_asset_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          key?: string
+          retrieved_at?: string
+          retrieved_from?: string | null
+          updated_at?: string
+          value?: Json
+          video_asset_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "video_source_metadata_video_asset_id_fkey"
+            columns: ["video_asset_id"]
+            isOneToOne: false
+            referencedRelation: "video_assets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -937,6 +1135,24 @@ export type Database = {
       app_role: "athlete" | "parent" | "coach" | "trainer" | "admin"
       data_source: "manual" | "ai" | "ai_corrected"
       play_side: "offense" | "defense" | "neutral" | "special"
+      provider_access_level:
+        | "link_only"
+        | "embed_available"
+        | "authorized_api"
+        | "raw_video_available"
+        | "unsupported"
+      provider_connection_status:
+        | "not_connected"
+        | "connected"
+        | "needs_configuration"
+      video_ingestion_status:
+        | "waiting"
+        | "uploading"
+        | "uploaded"
+        | "processing"
+        | "ready"
+        | "failed"
+      video_provider: "upload" | "youtube" | "hudl" | "external"
       workflow_status:
         | "upload_pending"
         | "uploaded"
@@ -1074,6 +1290,27 @@ export const Constants = {
       app_role: ["athlete", "parent", "coach", "trainer", "admin"],
       data_source: ["manual", "ai", "ai_corrected"],
       play_side: ["offense", "defense", "neutral", "special"],
+      provider_access_level: [
+        "link_only",
+        "embed_available",
+        "authorized_api",
+        "raw_video_available",
+        "unsupported",
+      ],
+      provider_connection_status: [
+        "not_connected",
+        "connected",
+        "needs_configuration",
+      ],
+      video_ingestion_status: [
+        "waiting",
+        "uploading",
+        "uploaded",
+        "processing",
+        "ready",
+        "failed",
+      ],
+      video_provider: ["upload", "youtube", "hudl", "external"],
       workflow_status: [
         "upload_pending",
         "uploaded",
