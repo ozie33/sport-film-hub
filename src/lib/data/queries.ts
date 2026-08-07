@@ -127,6 +127,8 @@ export type PlayerRecord = {
   jersey_number: string | null;
   position_id: string | null;
   height: string | null;
+  weight: string | null;
+  birthday: string | null;
   graduation_year: number | null;
   dominant_hand: string | null;
   notes: string | null;
@@ -134,7 +136,7 @@ export type PlayerRecord = {
 };
 
 const PLAYER_COLUMNS =
-  "id, first_name, last_name, image_url, sport_id, team_name, jersey_number, position_id, height, graduation_year, dominant_hand, notes, created_at";
+  "id, first_name, last_name, image_url, sport_id, team_name, jersey_number, position_id, height, weight, birthday, graduation_year, dominant_hand, notes, created_at";
 
 export function usePlayers() {
   return useQuery({
@@ -212,11 +214,19 @@ export type GameRecord = {
   analysis_status: string;
   clip_count: number;
   created_at: string;
+  team_id: string | null;
+  season: string | null;
+  jersey_number: string | null;
+  position_id: string | null;
+  uniform_primary_color: string | null;
+  uniform_secondary_color: string | null;
+  coach_name: string | null;
+  teams: { id: string; team_name: string; organization_name: string | null } | null;
   game_players: { player_id: string; is_primary: boolean; players: { first_name: string; last_name: string } | null }[];
 };
 
 const GAME_COLUMNS =
-  "id, sport_id, title, opponent, game_date, is_home, notes, video_status, analysis_status, clip_count, created_at, game_players(player_id, is_primary, players(first_name, last_name))";
+  "id, sport_id, title, opponent, game_date, is_home, notes, video_status, analysis_status, clip_count, created_at, team_id, season, jersey_number, position_id, uniform_primary_color, uniform_secondary_color, coach_name, teams(id, team_name, organization_name), game_players(player_id, is_primary, players(first_name, last_name))";
 
 export function useGames() {
   return useQuery({
@@ -255,6 +265,13 @@ export type GameInput = {
   game_date: string | null;
   is_home: boolean | null;
   notes: string | null;
+  team_id: string | null;
+  season: string | null;
+  jersey_number: string | null;
+  position_id: string | null;
+  uniform_primary_color: string | null;
+  uniform_secondary_color: string | null;
+  coach_name: string | null;
   player_ids: string[];
 };
 

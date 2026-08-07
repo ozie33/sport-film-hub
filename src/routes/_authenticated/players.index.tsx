@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePlayers, useProfile } from "@/lib/data/queries";
+import { useMemberships, teamDisplayName } from "@/lib/data/identity-queries";
 import { demoPlayers } from "@/lib/demo/demo-data";
 import { fullName, initials } from "@/lib/format";
 
@@ -30,21 +31,48 @@ export const Route = createFileRoute("/_authenticated/players/")({
 function PlayersPage() {
   const { data: profile } = useProfile();
   const { data: players = [], isLoading } = usePlayers();
+  const { data: memberships = [] } = useMemberships();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [query, setQuery] = useState("");
 
   const usingDemo = (profile?.demo_mode ?? false) && players.length === 0;
   const source = usingDemo ? demoPlayers : players;
 
+  /** Searchable haystack per player: name, teams, jersey numbers and seasons. */
+  const searchIndex = useMemo(() => {
+    const index = new Map<string, string>();
+    for (const membership of memberships) {
+      const parts = [
+        teamDisplayName(membership.teams),
+        membership.teams?.level ?? "",
+        membership.jersey_number ? `#${membership.jersey_number} ${membership.jersey_number}` : "",
+        membership.position_label ?? "",
+        membership.season ?? "",
+      ].join(" ");
+      index.set(membership.player_id, `${index.get(membership.player_id) ?? ""} ${parts}`);
+    }
+    return index;
+  }, [memberships]);
+
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) return source;
     return source.filter((player) =>
-      `${player.first_name} ${player.last_name} ${player.team_name ?? ""}`
+      `${player.first_name} ${player.last_name} ${player.team_name ?? ""} ${
+        player.jersey_number ? `#${player.jersey_number} ${player.jersey_number}` : ""
+      } ${searchIndex.get(player.id) ?? ""}`
         .toLowerCase()
         .includes(needle),
     );
-  }, [source, query]);
+  }, [source, query, searchIndex]);
+
+  const membershipsByPlayer = useMemo(() => {
+    const map = new Map<string, typeof memberships>();
+    for (const membership of memberships) {
+      map.set(membership.player_id, [...(map.get(membership.player_id) ?? []), membership]);
+    }
+    return map;
+  }, [memberships]);
 
   return (
     <AppShell>
@@ -62,7 +90,7 @@ function PlayersPage() {
       {usingDemo ? <DemoNotice>Sample players shown while your roster is empty.</DemoNotice> : null}
 
       <Input
-        placeholder="Search players or teams"
+        placeholder="Search by name, team, jersey number or season"
         value={query}
         onChange={(inputEvent) => setQuery(inputEvent.target.value)}
       />
@@ -106,7 +134,23 @@ function PlayersPage() {
                 </div>
               </div>
               <div className="mt-3 flex flex-wrap gap-1.5">
-                {player.jersey_number ? <Tag>#{player.jersey_number}</Tag> : null}
+                {(() => {
+                  const playerMemberships = membershipsByPlayer.get(player.id) ?? [];
+                  const current =
+                    playerMemberships.find((membership) => membership.is_current) ??
+                    playerMemberships[0];
+                  return (
+                    <>
+                      {current ? <Tag>{teamDisplayName(current.teams)}</Tag> : null}
+                      {playerMemberships.length > 1 ? (
+                        <Tag>{playerMemberships.length} teams</Tag>
+                      ) : null}
+                      {current?.jersey_number ?? player.jersey_number ? (
+                        <Tag>#{current?.jersey_number ?? player.jersey_number}</Tag>
+                      ) : null}
+                    </>
+                  );
+                })()}
                 {player.height ? <Tag>{player.height}</Tag> : null}
                 {player.graduation_year ? <Tag>Class of {player.graduation_year}</Tag> : null}
               </div>
