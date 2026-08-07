@@ -15,9 +15,18 @@ import { FilmPlayer } from "@/components/video/film-player";
 import { FilmSourceList } from "@/components/video/film-source-list";
 import { MarkPlayPanel } from "@/components/video/mark-play-panel";
 import { CapabilityList, SourceBadge } from "@/components/video/source-badge";
+import { PlayerIdentitySummary } from "@/components/players/player-identity-summary";
+import { AiReadinessPlaceholders } from "@/components/players/ai-readiness-placeholders";
 import type { FilmPlayerHandle } from "@/components/video/film-player-types";
 import { PLAY_SIDE_LABELS } from "@/lib/domain";
-import { useDeleteEvent, useEventTypes, useGame, useGameEvents } from "@/lib/data/queries";
+import {
+  useDeleteEvent,
+  useEventTypes,
+  useGame,
+  useGameEvents,
+  useSportPositions,
+} from "@/lib/data/queries";
+import { teamDisplayName } from "@/lib/data/identity-queries";
 import { useVideoAssets } from "@/lib/data/video-queries";
 import { capabilitiesFor } from "@/lib/video/capabilities";
 import { formatClock, formatGameDate, fullName } from "@/lib/format";
@@ -50,6 +59,7 @@ function GameDetail() {
   const { data: events = [] } = useGameEvents(gameId);
   const { data: eventTypes = [] } = useEventTypes(game?.sport_id ?? null);
   const { data: assets = [] } = useVideoAssets(gameId);
+  const { data: gamePositions = [] } = useSportPositions(game?.sport_id ?? null);
   const deleteEvent = useDeleteEvent(gameId);
 
   const playerRef = useRef<FilmPlayerHandle | null>(null);
@@ -73,6 +83,8 @@ function GameDetail() {
     player_id: link.player_id,
     name: fullName(link.players?.first_name, link.players?.last_name) || "Player",
   }));
+  const primaryLink =
+    (game?.game_players ?? []).find((link) => link.is_primary) ?? (game?.game_players ?? [])[0];
 
   const summary = useMemo(() => {
     const offense = events.filter((item) => item.offense_or_defense === "offense").length;
@@ -150,6 +162,29 @@ function GameDetail() {
           <StatCard key={stat.label} label={stat.label} value={stat.value} />
         ))}
       </div>
+
+      {primaryLink ? (
+        <PlayerIdentitySummary
+          playerId={primaryLink.player_id}
+          {...(primaryLink.players
+            ? {
+                playerName: {
+                  first: primaryLink.players.first_name,
+                  last: primaryLink.players.last_name,
+                },
+              }
+            : {})}
+          gameContext={{
+            teamName: game.teams ? teamDisplayName(game.teams) : null,
+            jerseyNumber: game.jersey_number,
+            positionName:
+              gamePositions.find((position) => position.id === game.position_id)?.name ?? null,
+            season: game.season,
+            primaryColor: game.uniform_primary_color,
+            secondaryColor: game.uniform_secondary_color,
+          }}
+        />
+      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <div className="space-y-6">
