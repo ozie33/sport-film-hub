@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { supabase } from "@/integrations/supabase/client";
-import type { AppRole, EventTypeRecord, SportPosition, SportRecord } from "@/lib/domain";
+import type { AppRole, EventTypeRecord, PlaySide, SportPosition, SportRecord } from "@/lib/domain";
 
 /* ---------------------------------- catalog --------------------------------- */
 
@@ -337,7 +337,7 @@ export type EventInput = {
   event_type_key: string;
   event_subtype: string | null;
   outcome: string | null;
-  offense_or_defense: string;
+  offense_or_defense: PlaySide;
   start_time: number;
   end_time: number | null;
   notes: string | null;

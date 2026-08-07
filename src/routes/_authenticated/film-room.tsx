@@ -55,7 +55,7 @@ function FilmRoom() {
           }
           action={
             <Button asChild>
-              <Link to="/games" search={games.length === 0 ? { add: true } : {}}>
+              <Link to="/games" search={{ add: games.length === 0 ? true : undefined }}>
                 {games.length === 0 ? "Analyze Your First Game" : "Go to games"}
               </Link>
             </Button>
