@@ -19,10 +19,20 @@ Relational schema, sport-agnostic by design:
 - `clips` — derived from events, holds render/asset state for later phases
 - `evaluations` — decision/outcome/impact/overall/confidence scores, tied to event
 - `playlists` + `playlist_clips` — film-room collections, with a `system_key` so auto-generated collections (Makes, Drives, Turnovers...) are data, not code
+- `game_videos` — one game can have many videos/camera angles (angle label, provider, source ref, duration, status, time offset for syncing angles). No upload in Phase 1; the table and models exist so upload drops in cleanly.
+
+Provenance is first-class on `events`, `clips`, and `evaluations`: `source` enum (`manual` | `ai` | `ai_corrected`), `created_by` (null for machine-generated rows), `model_version`, `confidence_score`, `manually_edited`, and `reviewed_by`/`reviewed_at`. AI output is therefore always distinguishable from human input, and a human correction never erases the original machine values.
+
+External-service readiness: a future Python/CV service writes into the same tables using the service role — `game_videos` gives it the media to process, `events`/`clips` carry `source = 'ai'` + `model_version` + timing, and `metadata` JSONB absorbs any sport- or model-specific detail. A `processing_jobs` table (job type, target game/video, status, error, timestamps) gives that service a place to report progress without a schema change.
 
 Reserved for later without migration pain: `teams`, `organizations`, `comments`, `workouts`, `subscriptions`.
 
 RLS on everything, scoped to the owning user. Enums for statuses (Upload Pending, Uploaded, Processing, Ready for Review, Reviewed, Error).
+
+Universal tables stay sport-neutral: no basketball columns anywhere. Positions, event types/subtypes, and outcome vocabularies live in per-sport lookup tables; anything genuinely sport-specific goes in `metadata` JSONB. `game_players` already makes multi-player games a schema fact, not a later migration.
+
+### Shared data models and components
+Typed models and query/mutation hooks per entity in `src/lib/models/` (one source of truth for shapes, status enums, and label maps), consumed by every screen. UI is built from a reusable kit — `PageHeader`, `DataTable`, `StatusBadge`, `EntityCard`, `EmptyState`, `StatCard`, `VideoPlaceholder`, `ClipList`/`ClipCard`, `TabbedDetailLayout`, `EntityFormDialog`, `DemoBadge` — rather than one-off components per page.
 
 ### Auth
 Sign up, login, logout, forgot password + `/reset-password` page, profile page. Email/password and Google sign-in. Post-signup onboarding wizard collecting first/last name, role, primary sport, position (shown only when the sport defines positions), and optional team name.
