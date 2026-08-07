@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { ArrowRight, Check } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -20,8 +22,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { AddFilmPanel } from "@/components/video/add-film-panel";
+import { useVideoAssets } from "@/lib/data/video-queries";
 import { useCreateGame, usePlayers, useProfile, useSports } from "@/lib/data/queries";
 import { fullName } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 export function GameFormDialog({
   open,
@@ -34,6 +39,11 @@ export function GameFormDialog({
   const { data: sports = [] } = useSports();
   const { data: players = [] } = usePlayers();
   const createGame = useCreateGame();
+  const navigate = useNavigate();
+
+  const [step, setStep] = useState<1 | 2>(1);
+  const [createdGameId, setCreatedGameId] = useState<string | null>(null);
+  const { data: assets = [] } = useVideoAssets(createdGameId ?? undefined);
 
   const [title, setTitle] = useState("");
   const [opponent, setOpponent] = useState("");
@@ -48,6 +58,16 @@ export function GameFormDialog({
     setSportId(profile?.primary_sport_id ?? sports[0]?.id ?? "");
   }, [open, profile, sports]);
 
+  function resetAll() {
+    setStep(1);
+    setCreatedGameId(null);
+    setTitle("");
+    setOpponent("");
+    setGameDate("");
+    setPlayerId("");
+    setNotes("");
+  }
+
   async function handleSubmit(formEvent: React.FormEvent) {
     formEvent.preventDefault();
     if (!sportId) {
@@ -55,7 +75,7 @@ export function GameFormDialog({
       return;
     }
     try {
-      await createGame.mutateAsync({
+      const gameId = await createGame.mutateAsync({
         sport_id: sportId,
         title: title.trim(),
         opponent: opponent.trim() || null,
@@ -64,27 +84,61 @@ export function GameFormDialog({
         notes: notes.trim() || null,
         player_ids: playerId ? [playerId] : [],
       });
-      toast.success("Game created. Video upload arrives in the next phase.");
-      onOpenChange(false);
-      setTitle("");
-      setOpponent("");
-      setGameDate("");
-      setPlayerId("");
-      setNotes("");
+      toast.success("Game created. Now attach the film.");
+      setCreatedGameId(gameId);
+      setStep(2);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not create the game");
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        onOpenChange(next);
+        if (!next) resetAll();
+      }}
+    >
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Analyze a new game</DialogTitle>
+          <DialogTitle>{step === 1 ? "Analyze a new game" : "Add film"}</DialogTitle>
           <DialogDescription>
-            Create the game record now. Video upload and AI analysis arrive in a later phase.
+            {step === 1
+              ? "Step 1 of 2 — game details."
+              : "Step 2 of 2 — attach film from an upload, YouTube or Hudl. You can also do this later."}
           </DialogDescription>
+          <StepIndicator step={step} />
         </DialogHeader>
+        {step === 2 && createdGameId ? (
+          <div className="space-y-4">
+            <AddFilmPanel gameId={createdGameId} makePrimary={assets.length === 0} />
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  onOpenChange(false);
+                  resetAll();
+                }}
+              >
+                {assets.length > 0 ? "Done" : "Skip for now"}
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  const gameId = createdGameId;
+                  onOpenChange(false);
+                  resetAll();
+                  void navigate({ to: "/games/$gameId", params: { gameId } });
+                }}
+              >
+                Open film room
+                <ArrowRight className="size-4" />
+              </Button>
+            </DialogFooter>
+          </div>
+        ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="game-title">Game title</Label>
@@ -178,11 +232,38 @@ export function GameFormDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={createGame.isPending}>
-              Create game
+              Continue to film
+              <ArrowRight className="size-4" />
             </Button>
           </DialogFooter>
         </form>
+        )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function StepIndicator({ step }: { step: 1 | 2 }) {
+  return (
+    <ol className="flex items-center gap-2 pt-2">
+      {[1, 2].map((value) => (
+        <li key={value} className="flex flex-1 items-center gap-2">
+          <span
+            className={cn(
+              "grid size-6 shrink-0 place-items-center rounded-full border text-xs font-semibold",
+              step >= value
+                ? "border-primary bg-primary/15 text-primary"
+                : "border-border text-muted-foreground",
+            )}
+          >
+            {step > value ? <Check className="size-3" /> : value}
+          </span>
+          <span className="label-caps text-[10px] text-muted-foreground">
+            {value === 1 ? "Game details" : "Add film"}
+          </span>
+          {value === 1 ? <span className="h-px flex-1 bg-border" /> : null}
+        </li>
+      ))}
+    </ol>
   );
 }
