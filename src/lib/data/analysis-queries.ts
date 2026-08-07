@@ -518,3 +518,36 @@ export function useReviewCandidate() {
     },
   });
 }
+
+export type CandidateCounts = {
+  total: number;
+  approved: number;
+  rejected: number;
+  corrected: number;
+};
+
+/** Per-job review tallies for the analysis history panel. */
+export function useCandidateCountsByJob(gameId: string | undefined) {
+  return useQuery({
+    queryKey: ["candidate-counts", gameId],
+    enabled: Boolean(gameId),
+    queryFn: async (): Promise<Record<string, CandidateCounts>> => {
+      const { data, error } = await supabase
+        .from("candidate_clips")
+        .select("analysis_job_id, review_status, wrong_player")
+        .eq("game_id", gameId!);
+      if (error) throw error;
+      const counts: Record<string, CandidateCounts> = {};
+      for (const row of data ?? []) {
+        const key = row.analysis_job_id as string;
+        counts[key] ??= { total: 0, approved: 0, rejected: 0, corrected: 0 };
+        const entry = counts[key]!;
+        entry.total += 1;
+        if (row.review_status === "approved" || row.review_status === "edited") entry.approved += 1;
+        if (row.review_status === "rejected") entry.rejected += 1;
+        if (row.wrong_player) entry.corrected += 1;
+      }
+      return counts;
+    },
+  });
+}
