@@ -245,7 +245,7 @@ function GameDetail() {
           <SectionCard
             title="Film Sources"
             description="Uploads, YouTube and Hudl links live side by side"
-            action={
+            actions={
               <Button variant="outline" size="sm" onClick={() => setShowAddFilm((value) => !value)}>
                 <Plus className="size-4" /> Add film
               </Button>
