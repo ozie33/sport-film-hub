@@ -4,7 +4,7 @@ import { Inbox, Share2 } from "lucide-react";
 import { SectionCard } from "@/components/common/stat-card";
 import { Tag } from "@/components/common/status-badge";
 import { SHARE_TYPE_LABELS, useSharedWithMe } from "@/lib/data/share-queries";
-import { formatDateLabel } from "@/lib/format";
+import { formatGameDate } from "@/lib/format";
 
 /** Film a coach sent this user, opened with the same provider-aware player. */
 export function SharedWithMe({ compact = false }: { compact?: boolean }) {
@@ -33,7 +33,7 @@ export function SharedWithMe({ compact = false }: { compact?: boolean }) {
                   {SHARE_TYPE_LABELS[share.resource_type]}
                 </span>
                 <span className="block truncate text-xs text-muted-foreground">
-                  {share.note ?? `Shared ${formatDateLabel(share.created_at)}`}
+                  {share.note ?? `Shared ${formatGameDate(share.created_at)}`}
                 </span>
               </span>
               <Tag>{share.permission}</Tag>
