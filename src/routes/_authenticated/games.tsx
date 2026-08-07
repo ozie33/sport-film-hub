@@ -61,7 +61,7 @@ function GamesPage() {
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return source.filter((game) => {
-      const matchesStatus = status === "all" || game.analysis_status === status;
+      const matchesStatus = status === "all" || game.video_status === status;
       if (!matchesStatus) return false;
       if (!needle) return true;
       const names = (game.game_players ?? [])
