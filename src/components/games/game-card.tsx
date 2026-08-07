@@ -40,7 +40,7 @@ export function GameCard({ game, isDemo = false }: { game: GameRecord; isDemo?: 
         </div>
       </dl>
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <StatusBadge status={game.analysis_status} />
+        <StatusBadge status={game.video_status} />
       </div>
       <div className="mt-4">
         {isDemo ? (
