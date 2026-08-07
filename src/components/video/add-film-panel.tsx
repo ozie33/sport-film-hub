@@ -188,7 +188,7 @@ function UploadForm({
         width: probe.width,
         height: probe.height,
         ingestion_status: "ready",
-        processing_status: "waiting",
+        processing_status: "ready",
         is_primary: makePrimary,
         rights_confirmed: true,
       });
@@ -397,7 +397,7 @@ function LinkForm({
         thumbnail_url: thumbnail,
         duration,
         ingestion_status: "ready",
-        processing_status: "waiting",
+        processing_status: "ready",
         is_primary: makePrimary,
         provider_metadata: metadata,
         rights_confirmed: true,
