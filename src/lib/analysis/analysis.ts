@@ -240,3 +240,13 @@ export function analysisErrorMessage(
 /** Minimum confirmations before analysis may start; 5 is the target. */
 export const MIN_IDENTITY_CONFIRMATIONS = 3;
 export const TARGET_IDENTITY_CONFIRMATIONS = 5;
+
+/** How a clip should be attributed in the UI: AI, corrected AI, or human. */
+export function clipSourceLabel(
+  source: string | null | undefined,
+  approved?: boolean | null,
+): string {
+  if (source === "ai") return approved ? "AI Verified" : "AI Generated";
+  if (source === "ai_corrected") return "AI + User Edited";
+  return "Manual";
+}
