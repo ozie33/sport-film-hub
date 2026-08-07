@@ -23,7 +23,7 @@ import { useGames, useProfile } from "@/lib/data/queries";
 import { demoGames } from "@/lib/demo/demo-data";
 
 export const Route = createFileRoute("/_authenticated/games")({
-  validateSearch: (search: Record<string, unknown>): { add?: boolean } => ({
+  validateSearch: (search: Record<string, unknown>): { add?: boolean | undefined } => ({
     add: search['add'] === true || search['add'] === "true" ? true : undefined,
   }),
   head: () => ({
