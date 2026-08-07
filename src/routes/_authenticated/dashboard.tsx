@@ -6,6 +6,7 @@ import { ClipCard } from "@/components/common/clip-card";
 import { DemoNotice } from "@/components/common/demo-badge";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
+import { SharedWithMe } from "@/components/sharing/shared-with-me";
 import { SectionCard, StatCard } from "@/components/common/stat-card";
 import { GameCard } from "@/components/games/game-card";
 import { Button } from "@/components/ui/button";
@@ -47,6 +48,8 @@ function Dashboard() {
           </Button>
         }
       />
+
+      <SharedWithMe compact />
 
       <SectionCard
         title="Recent Games"
