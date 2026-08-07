@@ -19,6 +19,7 @@ import { Route as AuthenticatedFilmRoomRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authenticated/onboarding'
 import { Route as AuthenticatedReelsRouteImport } from './routes/_authenticated/reels'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
+import { Route as AuthenticatedAnalysisJobIdRouteImport } from './routes/_authenticated/analysis.$jobId'
 import { Route as AuthenticatedGamesIndexRouteImport } from './routes/_authenticated/games.index'
 import { Route as AuthenticatedGamesGameIdRouteImport } from './routes/_authenticated/games.$gameId'
 import { Route as AuthenticatedPlayersIndexRouteImport } from './routes/_authenticated/players.index'
@@ -76,6 +77,12 @@ const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAnalysisJobIdRoute =
+  AuthenticatedAnalysisJobIdRouteImport.update({
+    id: '/analysis/$jobId',
+    path: '/analysis/$jobId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedGamesIndexRoute = AuthenticatedGamesIndexRouteImport.update({
   id: '/games/',
   path: '/games/',
@@ -121,6 +128,7 @@ export interface FileRoutesByFullPath {
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/reels': typeof AuthenticatedReelsRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/analysis/$jobId': typeof AuthenticatedAnalysisJobIdRoute
   '/games/$gameId': typeof AuthenticatedGamesGameIdRoute
   '/players/$playerId': typeof AuthenticatedPlayersPlayerIdRoute
   '/oauth/google-drive/return': typeof OauthGoogleDriveReturnRoute
@@ -138,6 +146,7 @@ export interface FileRoutesByTo {
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/reels': typeof AuthenticatedReelsRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/analysis/$jobId': typeof AuthenticatedAnalysisJobIdRoute
   '/games/$gameId': typeof AuthenticatedGamesGameIdRoute
   '/players/$playerId': typeof AuthenticatedPlayersPlayerIdRoute
   '/oauth/google-drive/return': typeof OauthGoogleDriveReturnRoute
@@ -157,6 +166,7 @@ export interface FileRoutesById {
   '/_authenticated/onboarding': typeof AuthenticatedOnboardingRoute
   '/_authenticated/reels': typeof AuthenticatedReelsRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
+  '/_authenticated/analysis/$jobId': typeof AuthenticatedAnalysisJobIdRoute
   '/_authenticated/games/$gameId': typeof AuthenticatedGamesGameIdRoute
   '/_authenticated/players/$playerId': typeof AuthenticatedPlayersPlayerIdRoute
   '/oauth/google-drive/return': typeof OauthGoogleDriveReturnRoute
@@ -176,6 +186,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/reels'
     | '/settings'
+    | '/analysis/$jobId'
     | '/games/$gameId'
     | '/players/$playerId'
     | '/oauth/google-drive/return'
@@ -193,6 +204,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/reels'
     | '/settings'
+    | '/analysis/$jobId'
     | '/games/$gameId'
     | '/players/$playerId'
     | '/oauth/google-drive/return'
@@ -211,6 +223,7 @@ export interface FileRouteTypes {
     | '/_authenticated/onboarding'
     | '/_authenticated/reels'
     | '/_authenticated/settings'
+    | '/_authenticated/analysis/$jobId'
     | '/_authenticated/games/$gameId'
     | '/_authenticated/players/$playerId'
     | '/oauth/google-drive/return'
@@ -300,6 +313,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/analysis/$jobId': {
+      id: '/_authenticated/analysis/$jobId'
+      path: '/analysis/$jobId'
+      fullPath: '/analysis/$jobId'
+      preLoaderRoute: typeof AuthenticatedAnalysisJobIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/games/': {
       id: '/_authenticated/games/'
       path: '/games'
@@ -352,6 +372,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedOnboardingRoute: typeof AuthenticatedOnboardingRoute
   AuthenticatedReelsRoute: typeof AuthenticatedReelsRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
+  AuthenticatedAnalysisJobIdRoute: typeof AuthenticatedAnalysisJobIdRoute
   AuthenticatedGamesGameIdRoute: typeof AuthenticatedGamesGameIdRoute
   AuthenticatedPlayersPlayerIdRoute: typeof AuthenticatedPlayersPlayerIdRoute
   AuthenticatedGamesIndexRoute: typeof AuthenticatedGamesIndexRoute
@@ -365,6 +386,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedOnboardingRoute: AuthenticatedOnboardingRoute,
   AuthenticatedReelsRoute: AuthenticatedReelsRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
+  AuthenticatedAnalysisJobIdRoute: AuthenticatedAnalysisJobIdRoute,
   AuthenticatedGamesGameIdRoute: AuthenticatedGamesGameIdRoute,
   AuthenticatedPlayersPlayerIdRoute: AuthenticatedPlayersPlayerIdRoute,
   AuthenticatedGamesIndexRoute: AuthenticatedGamesIndexRoute,
