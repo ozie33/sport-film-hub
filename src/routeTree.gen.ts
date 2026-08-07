@@ -23,6 +23,8 @@ import { Route as AuthenticatedReelsRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedGamesGameIdRouteImport } from './routes/_authenticated/games.$gameId'
 import { Route as AuthenticatedPlayersPlayerIdRouteImport } from './routes/_authenticated/players.$playerId'
+import { Route as OauthGoogleDriveReturnRouteImport } from './routes/oauth/google-drive.return'
+import { Route as ApiPublicDriveStreamAssetIdRouteImport } from './routes/api/public/drive-stream.$assetId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -96,6 +98,17 @@ const AuthenticatedPlayersPlayerIdRoute =
     path: '/$playerId',
     getParentRoute: () => AuthenticatedPlayersRoute,
   } as any)
+const OauthGoogleDriveReturnRoute = OauthGoogleDriveReturnRouteImport.update({
+  id: '/oauth/google-drive/return',
+  path: '/oauth/google-drive/return',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicDriveStreamAssetIdRoute =
+  ApiPublicDriveStreamAssetIdRouteImport.update({
+    id: '/api/public/drive-stream/$assetId',
+    path: '/api/public/drive-stream/$assetId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -111,6 +124,8 @@ export interface FileRoutesByFullPath {
   '/settings': typeof AuthenticatedSettingsRoute
   '/games/$gameId': typeof AuthenticatedGamesGameIdRoute
   '/players/$playerId': typeof AuthenticatedPlayersPlayerIdRoute
+  '/oauth/google-drive/return': typeof OauthGoogleDriveReturnRoute
+  '/api/public/drive-stream/$assetId': typeof ApiPublicDriveStreamAssetIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -126,6 +141,8 @@ export interface FileRoutesByTo {
   '/settings': typeof AuthenticatedSettingsRoute
   '/games/$gameId': typeof AuthenticatedGamesGameIdRoute
   '/players/$playerId': typeof AuthenticatedPlayersPlayerIdRoute
+  '/oauth/google-drive/return': typeof OauthGoogleDriveReturnRoute
+  '/api/public/drive-stream/$assetId': typeof ApiPublicDriveStreamAssetIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -143,6 +160,8 @@ export interface FileRoutesById {
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/games/$gameId': typeof AuthenticatedGamesGameIdRoute
   '/_authenticated/players/$playerId': typeof AuthenticatedPlayersPlayerIdRoute
+  '/oauth/google-drive/return': typeof OauthGoogleDriveReturnRoute
+  '/api/public/drive-stream/$assetId': typeof ApiPublicDriveStreamAssetIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -160,6 +179,8 @@ export interface FileRouteTypes {
     | '/settings'
     | '/games/$gameId'
     | '/players/$playerId'
+    | '/oauth/google-drive/return'
+    | '/api/public/drive-stream/$assetId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -175,6 +196,8 @@ export interface FileRouteTypes {
     | '/settings'
     | '/games/$gameId'
     | '/players/$playerId'
+    | '/oauth/google-drive/return'
+    | '/api/public/drive-stream/$assetId'
   id:
     | '__root__'
     | '/'
@@ -191,6 +214,8 @@ export interface FileRouteTypes {
     | '/_authenticated/settings'
     | '/_authenticated/games/$gameId'
     | '/_authenticated/players/$playerId'
+    | '/oauth/google-drive/return'
+    | '/api/public/drive-stream/$assetId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -198,6 +223,8 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  OauthGoogleDriveReturnRoute: typeof OauthGoogleDriveReturnRoute
+  ApiPublicDriveStreamAssetIdRoute: typeof ApiPublicDriveStreamAssetIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -300,6 +327,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPlayersPlayerIdRouteImport
       parentRoute: typeof AuthenticatedPlayersRoute
     }
+    '/oauth/google-drive/return': {
+      id: '/oauth/google-drive/return'
+      path: '/oauth/google-drive/return'
+      fullPath: '/oauth/google-drive/return'
+      preLoaderRoute: typeof OauthGoogleDriveReturnRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/drive-stream/$assetId': {
+      id: '/api/public/drive-stream/$assetId'
+      path: '/api/public/drive-stream/$assetId'
+      fullPath: '/api/public/drive-stream/$assetId'
+      preLoaderRoute: typeof ApiPublicDriveStreamAssetIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -355,17 +396,9 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  OauthGoogleDriveReturnRoute: OauthGoogleDriveReturnRoute,
+  ApiPublicDriveStreamAssetIdRoute: ApiPublicDriveStreamAssetIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

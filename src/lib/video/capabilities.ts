@@ -12,7 +12,7 @@
  * These are NOT the same thing.
  */
 
-export type VideoProviderKey = "upload" | "youtube" | "hudl" | "external";
+export type VideoProviderKey = "upload" | "youtube" | "hudl" | "google_drive" | "external";
 
 export type ProviderAccessLevel =
   | "link_only"
@@ -350,6 +350,89 @@ export const hudlAdapter: VideoAdapter = {
 
 /* ------------------------------ external ------------------------------ */
 
+/* ---------------------------- google drive ---------------------------- */
+
+const DRIVE_HOSTS = ["drive.google.com", "docs.google.com"];
+
+/** Drive links are only a convenience — the file id is the identifier we keep. */
+export function extractDriveFileId(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  if (/^[A-Za-z0-9_-]{20,}$/.test(trimmed)) return trimmed;
+  let url: URL;
+  try {
+    url = new URL(trimmed.startsWith("http") ? trimmed : `https://${trimmed}`);
+  } catch {
+    return null;
+  }
+  if (!DRIVE_HOSTS.includes(url.hostname.toLowerCase())) return null;
+  const fromQuery = url.searchParams.get("id");
+  if (fromQuery) return fromQuery;
+  const segments = url.pathname.split("/").filter(Boolean);
+  const marker = segments.indexOf("d");
+  if (marker >= 0 && segments[marker + 1]) return segments[marker + 1]!;
+  return null;
+}
+
+export const googleDriveAdapter: VideoAdapter = {
+  key: "google_drive",
+  label: "Google Drive",
+  tagline: "Your own Drive library",
+  description:
+    "Film stays in your Google Drive. We store the reference and stream it with your authorization — full frame access for future analysis, no duplicate copy here.",
+  enabled: true,
+  parseUrl: (raw) => {
+    const fileId = extractDriveFileId(raw);
+    if (!fileId) {
+      return { ok: false, error: "That doesn't look like a Google Drive file link." };
+    }
+    return {
+      ok: true,
+      value: {
+        provider: "google_drive",
+        accessLevel: "authorized_api",
+        externalVideoId: fileId,
+        externalUrl: `https://drive.google.com/file/d/${fileId}/view`,
+        embedUrl: `https://drive.google.com/file/d/${fileId}/preview`,
+        thumbnailUrl: null,
+        providerMetadata: {},
+      },
+    };
+  },
+  capabilities: (accessLevel) => {
+    switch (accessLevel) {
+      // Authorized Drive file: we can stream the real bytes on the server.
+      case "authorized_api":
+      case "raw_video_available":
+        return {
+          playback: true,
+          timestamp_seeking: true,
+          playback_speed: true,
+          manual_clipping: true,
+          raw_video_access: true,
+          server_side_processing: true,
+          computer_vision_processing: true,
+          local_clip_rendering: false,
+          export: true,
+          continuous_player_cut: true,
+        };
+      // Access was revoked or never granted — degrade honestly to a link.
+      case "link_only":
+      case "embed_available":
+        return { ...NO_CAPABILITIES, manual_clipping: true };
+      default:
+        return NO_CAPABILITIES;
+    }
+  },
+  playerKind: (accessLevel) => {
+    if (accessLevel === "authorized_api" || accessLevel === "raw_video_available") return "native";
+    if (accessLevel === "link_only" || accessLevel === "embed_available") return "link";
+    return "none";
+  },
+};
+
+/* ------------------------------ external ------------------------------ */
+
 export const externalAdapter: VideoAdapter = {
   key: "external",
   label: "Other source",
@@ -385,6 +468,7 @@ export const VIDEO_ADAPTERS: Record<VideoProviderKey, VideoAdapter> = {
   upload: uploadAdapter,
   youtube: youtubeAdapter,
   hudl: hudlAdapter,
+  google_drive: googleDriveAdapter,
   external: externalAdapter,
 };
 
@@ -392,6 +476,7 @@ export const PROVIDER_LABELS: Record<VideoProviderKey, string> = {
   upload: "Uploaded",
   youtube: "YouTube",
   hudl: "Hudl",
+  google_drive: "Google Drive",
   external: "External",
 };
 

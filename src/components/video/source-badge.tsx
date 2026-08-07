@@ -1,4 +1,4 @@
-import { Film, Link2, Upload, Youtube } from "lucide-react";
+import { Film, HardDrive, Link2, Upload, Youtube } from "lucide-react";
 import { Tag } from "@/components/common/status-badge";
 import {
   ACCESS_LEVEL_LABELS,
@@ -17,6 +17,7 @@ const PROVIDER_ICONS: Record<VideoProviderKey, typeof Film> = {
   upload: Upload,
   youtube: Youtube,
   hudl: Film,
+  google_drive: HardDrive,
   external: Link2,
 };
 

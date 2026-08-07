@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { NativeVideoPlayer } from "@/components/video/native-video-player";
 import { YouTubePlayer } from "@/components/video/youtube-player";
 import { SourceBadge } from "@/components/video/source-badge";
-import { useSignedFilmUrl } from "@/lib/data/video-queries";
+import { useDrivePlaybackUrl, useSignedFilmUrl } from "@/lib/data/video-queries";
 import { PROVIDER_LABELS, playerKindFor, type VideoProviderKey } from "@/lib/video/capabilities";
 import type { FilmPlayerHandle } from "@/components/video/film-player-types";
 
@@ -39,6 +39,11 @@ export const FilmPlayer = forwardRef<
   const { data: signedUrl, isPending: signing } = useSignedFilmUrl(
     asset?.provider === "upload" ? asset.storage_path : null,
   );
+  const {
+    data: driveUrl,
+    isPending: resolvingDrive,
+    isError: driveFailed,
+  } = useDrivePlaybackUrl(asset?.provider === "google_drive" ? asset.id : null);
 
   if (!asset) {
     return (
@@ -52,10 +57,26 @@ export const FilmPlayer = forwardRef<
   const kind = playerKindFor(asset.provider, asset.access_level);
 
   if (kind === "native") {
-    if (signing) {
+    const isDrive = asset.provider === "google_drive";
+    const src = isDrive ? driveUrl : signedUrl;
+    if (isDrive ? resolvingDrive : signing) {
       return <FilmSurfaceMessage title="Preparing film…" body="Fetching a secure playback link." />;
     }
-    if (!signedUrl) {
+    if (!src) {
+      if (isDrive) {
+        return (
+          <FilmSurfaceMessage
+            title="Source video unavailable"
+            body={
+              driveFailed
+                ? "We couldn't open this film from Google Drive. Reconnect Drive or open it there directly."
+                : "This Google Drive film can't be streamed right now. You can still open it in Drive."
+            }
+            action={asset.external_url}
+            provider={asset.provider}
+          />
+        );
+      }
       return (
         <FilmSurfaceMessage
           title="Playback unavailable"
@@ -66,7 +87,7 @@ export const FilmPlayer = forwardRef<
     return (
       <NativeVideoPlayer
         ref={ref}
-        src={signedUrl}
+        src={src}
         poster={asset.thumbnail_url}
         {...(onTimeUpdate ? { onTimeUpdate } : {})}
         {...(onDuration ? { onDuration } : {})}
