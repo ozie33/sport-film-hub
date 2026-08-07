@@ -1,34 +1,24 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft, Plus, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
-import { toast } from "sonner";
+import { ArrowLeft, Play, Plus, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { StatusBadge, Tag } from "@/components/common/status-badge";
 import { SectionCard, StatCard } from "@/components/common/stat-card";
-import { VideoPlaceholder } from "@/components/common/video-placeholder";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Textarea } from "@/components/ui/textarea";
+import { AddFilmPanel } from "@/components/video/add-film-panel";
+import { FilmPlayer } from "@/components/video/film-player";
+import { FilmSourceList } from "@/components/video/film-source-list";
+import { MarkPlayPanel } from "@/components/video/mark-play-panel";
+import { CapabilityList, SourceBadge } from "@/components/video/source-badge";
+import type { FilmPlayerHandle } from "@/components/video/film-player-types";
 import { PLAY_SIDE_LABELS } from "@/lib/domain";
-import {
-  useCreateEvent,
-  useDeleteEvent,
-  useEventTypes,
-  useGame,
-  useGameEvents,
-} from "@/lib/data/queries";
+import { useDeleteEvent, useEventTypes, useGame, useGameEvents } from "@/lib/data/queries";
+import { useVideoAssets } from "@/lib/data/video-queries";
+import { capabilitiesFor } from "@/lib/video/capabilities";
 import { formatClock, formatGameDate, fullName } from "@/lib/format";
 
 export const Route = createFileRoute("/_authenticated/games/$gameId")({
@@ -58,69 +48,50 @@ function GameDetail() {
   const { data: game, isLoading } = useGame(gameId);
   const { data: events = [] } = useGameEvents(gameId);
   const { data: eventTypes = [] } = useEventTypes(game?.sport_id ?? null);
-  const createEvent = useCreateEvent();
+  const { data: assets = [] } = useVideoAssets(gameId);
   const deleteEvent = useDeleteEvent(gameId);
 
-  const [typeKey, setTypeKey] = useState("");
-  const [subtype, setSubtype] = useState("");
-  const [outcome, setOutcome] = useState("");
-  const [clock, setClock] = useState("");
-  const [notes, setNotes] = useState("");
+  const playerRef = useRef<FilmPlayerHandle | null>(null);
+  const [activeAssetId, setActiveAssetId] = useState<string | null>(null);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [showAddFilm, setShowAddFilm] = useState(false);
 
-  const selectedType = eventTypes.find((type) => type.key === typeKey);
-  const primaryPlayer = game?.game_players?.find((link) => link.is_primary) ?? game?.game_players?.[0];
+  useEffect(() => {
+    if (assets.length === 0) {
+      setActiveAssetId(null);
+      return;
+    }
+    if (!activeAssetId || !assets.some((asset) => asset.id === activeAssetId)) {
+      setActiveAssetId(assets[0]!.id);
+    }
+  }, [assets, activeAssetId]);
+
+  const activeAsset = assets.find((asset) => asset.id === activeAssetId) ?? null;
+  const capabilities = capabilitiesFor(activeAsset?.provider, activeAsset?.access_level);
+  const gamePlayers = (game?.game_players ?? []).map((link) => ({
+    player_id: link.player_id,
+    name: fullName(link.players?.first_name, link.players?.last_name) || "Player",
+  }));
 
   const summary = useMemo(() => {
     const offense = events.filter((item) => item.offense_or_defense === "offense").length;
     const defense = events.filter((item) => item.offense_or_defense === "defense").length;
     return [
-      { label: "Tagged events", value: String(events.length) },
+      { label: "Marked plays", value: String(events.length) },
       { label: "Offense", value: String(offense) },
       { label: "Defense", value: String(defense) },
-      { label: "Clips", value: String(game?.clip_count ?? 0) },
+      { label: "Film sources", value: String(assets.length) },
     ];
-  }, [events, game]);
+  }, [events, assets]);
 
-  function parseClock(value: string): number | null {
-    const trimmed = value.trim();
-    if (!trimmed) return null;
-    if (trimmed.includes(":")) {
-      const [minutes, seconds] = trimmed.split(":");
-      const total = Number(minutes) * 60 + Number(seconds);
-      return Number.isFinite(total) ? total : null;
-    }
-    const asNumber = Number(trimmed);
-    return Number.isFinite(asNumber) ? asNumber : null;
-  }
-
-  async function handleAddEvent(formEvent: React.FormEvent) {
-    formEvent.preventDefault();
-    const startTime = parseClock(clock);
-    if (!typeKey || startTime === null) {
-      toast.error("Pick an event type and a valid timestamp (mm:ss)");
+  function seekTo(seconds: number, assetId: string | null) {
+    if (assetId && assetId !== activeAssetId) {
+      setActiveAssetId(assetId);
       return;
     }
-    try {
-      await createEvent.mutateAsync({
-        game_id: gameId,
-        sport_id: game!.sport_id,
-        player_id: primaryPlayer?.player_id ?? null,
-        event_type_key: typeKey,
-        event_subtype: subtype || null,
-        outcome: outcome || null,
-        offense_or_defense: selectedType?.default_side ?? "neutral",
-        start_time: startTime,
-        end_time: startTime + 8,
-        notes: notes.trim() || null,
-      });
-      toast.success("Event tagged");
-      setSubtype("");
-      setOutcome("");
-      setClock("");
-      setNotes("");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not tag the event");
-    }
+    if (!capabilities.timestamp_seeking) return;
+    playerRef.current?.seek(Math.max(0, seconds - 1));
+    playerRef.current?.play();
   }
 
   if (isLoading) {
@@ -176,16 +147,28 @@ function GameDetail() {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <div className="space-y-6">
-          <VideoPlaceholder
-            title={game.title}
-            subtitle="Video upload and AI analysis arrive in a later phase."
+          <FilmPlayer
+            key={activeAsset?.id ?? "empty"}
+            ref={playerRef}
+            asset={activeAsset}
+            onTimeUpdate={setCurrentTime}
           />
 
-          <SectionCard title="Event Timeline" description="Chronological tagged moments">
+          {activeAsset ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <SourceBadge provider={activeAsset.provider} />
+              <span className="text-sm text-muted-foreground">{activeAsset.label}</span>
+              <span className="ml-auto text-xs tabular-nums text-muted-foreground">
+                Playhead {formatClock(currentTime)}
+              </span>
+            </div>
+          ) : null}
+
+          <SectionCard title="Event Timeline" description="Chronological marked plays">
             {events.length === 0 ? (
               <EmptyState
-                title="No events tagged yet"
-                description="Tag key moments manually now; AI-generated events will merge into this same timeline."
+                title="No plays marked yet"
+                description="Use Mark Play to log In and Out points. AI-generated events will merge into this same timeline later."
               />
             ) : (
               <ol className="space-y-2">
@@ -194,9 +177,16 @@ function GameDetail() {
                     key={item.id}
                     className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 rounded-lg border border-border bg-surface-2 px-3 py-2"
                   >
-                    <span className="label-caps rounded-md bg-background px-2 py-1 text-[11px] tabular-nums">
+                    <button
+                      type="button"
+                      onClick={() => seekTo(item.start_time, item.video_asset_id)}
+                      disabled={!item.video_asset_id && !capabilities.timestamp_seeking}
+                      className="label-caps inline-flex items-center gap-1 rounded-md bg-background px-2 py-1 text-[11px] tabular-nums hover:text-primary disabled:opacity-60"
+                      aria-label={`Jump to ${formatClock(item.start_time)}`}
+                    >
+                      <Play className="size-3" />
                       {formatClock(item.start_time)}
-                    </span>
+                    </button>
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">
                         {eventTypes.find((type) => type.key === item.event_type_key)?.name ??
@@ -232,92 +222,62 @@ function GameDetail() {
         </div>
 
         <div className="space-y-6">
-          <SectionCard title="Tag an Event" description="Manual entry until AI analysis is live">
-            <form onSubmit={handleAddEvent} className="space-y-4">
-              <div className="space-y-1.5">
-                <Label>Event type</Label>
-                <Select
-                  value={typeKey}
-                  onValueChange={(value) => {
-                    setTypeKey(value);
-                    setSubtype("");
-                    setOutcome("");
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select an event type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {eventTypes.map((type) => (
-                      <SelectItem key={type.id} value={type.key}>
-                        {type.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {selectedType && selectedType.subtypes.length > 0 ? (
-                <div className="space-y-1.5">
-                  <Label>Subtype</Label>
-                  <Select value={subtype} onValueChange={setSubtype}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Optional" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {selectedType.subtypes.map((value) => (
-                        <SelectItem key={value} value={value}>
-                          {value}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ) : null}
-
-              {selectedType && selectedType.outcomes.length > 0 ? (
-                <div className="space-y-1.5">
-                  <Label>Outcome</Label>
-                  <Select value={outcome} onValueChange={setOutcome}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Optional" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {selectedType.outcomes.map((value) => (
-                        <SelectItem key={value} value={value}>
-                          {value}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ) : null}
-
-              <div className="space-y-1.5">
-                <Label htmlFor="event-clock">Video timestamp (mm:ss)</Label>
-                <Input
-                  id="event-clock"
-                  placeholder="02:14"
-                  value={clock}
-                  onChange={(inputEvent) => setClock(inputEvent.target.value)}
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="event-notes">Coaching note</Label>
-                <Textarea
-                  id="event-notes"
-                  rows={3}
-                  value={notes}
-                  onChange={(inputEvent) => setNotes(inputEvent.target.value)}
-                />
-              </div>
-
-              <Button type="submit" className="w-full" disabled={createEvent.isPending}>
-                <Plus className="mr-1 size-4" /> Add event
-              </Button>
-            </form>
+          <SectionCard
+            title="Mark Play"
+            description={
+              activeAsset
+                ? "Set In and Out points, label the play, save."
+                : "Attach film to start marking plays."
+            }
+          >
+            <MarkPlayPanel
+              gameId={gameId}
+              sportId={game.sport_id}
+              videoAssetId={activeAsset?.id ?? null}
+              eventTypes={eventTypes}
+              players={gamePlayers}
+              playerRef={playerRef}
+              canSeek={capabilities.timestamp_seeking}
+              currentTime={currentTime}
+            />
           </SectionCard>
+
+          <SectionCard
+            title="Film Sources"
+            description="Uploads, YouTube and Hudl links live side by side"
+            actions={
+              <Button variant="outline" size="sm" onClick={() => setShowAddFilm((value) => !value)}>
+                <Plus className="size-4" /> Add film
+              </Button>
+            }
+          >
+            <div className="space-y-4">
+              <FilmSourceList
+                assets={assets}
+                activeId={activeAssetId}
+                onSelect={setActiveAssetId}
+              />
+              {showAddFilm || assets.length === 0 ? (
+                <AddFilmPanel
+                  gameId={gameId}
+                  makePrimary={assets.length === 0}
+                  onAdded={() => setShowAddFilm(false)}
+                />
+              ) : null}
+            </div>
+          </SectionCard>
+
+          {activeAsset ? (
+            <SectionCard
+              title="Source Capabilities"
+              description="What this film supports right now"
+            >
+              <CapabilityList
+                provider={activeAsset.provider}
+                accessLevel={activeAsset.access_level}
+              />
+            </SectionCard>
+          ) : null}
 
           <SectionCard title="Players in this Game">
             {(game.game_players ?? []).length === 0 ? (
