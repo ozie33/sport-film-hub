@@ -15,7 +15,7 @@ import { usePlayers, useProfile } from "@/lib/data/queries";
 import { demoPlayers } from "@/lib/demo/demo-data";
 import { fullName, initials } from "@/lib/format";
 
-export const Route = createFileRoute("/_authenticated/players")({
+export const Route = createFileRoute("/_authenticated/players/")({
   head: () => ({
     meta: [
       { title: "Players — CourtBase" },
