@@ -42,6 +42,27 @@ export type VideoAssetRecord = {
 const VIDEO_ASSET_COLUMNS =
   "id, game_id, label, source_type, provider, access_level, external_video_id, external_url, embed_url, playback_url, storage_path, original_filename, mime_type, file_size, duration, width, height, thumbnail_url, ingestion_status, processing_status, is_primary, error, provider_metadata, rights_confirmed_at, created_at";
 
+/**
+ * The game row carries the headline film status shown on cards and detail
+ * headers, so it has to follow whatever the attached assets say.
+ */
+async function syncGameVideoStatus(gameId: string) {
+  const { data, error } = await supabase
+    .from("video_assets")
+    .select("ingestion_status")
+    .eq("game_id", gameId);
+  if (error) return;
+  const statuses = (data ?? []).map((row) => row.ingestion_status as VideoIngestionStatus);
+  let next: "upload_pending" | "uploaded" | "processing" | "ready_for_review" | "error";
+  if (statuses.length === 0) next = "upload_pending";
+  else if (statuses.some((status) => status === "ready")) next = "ready_for_review";
+  else if (statuses.some((status) => status === "processing")) next = "processing";
+  else if (statuses.some((status) => status === "uploaded")) next = "uploaded";
+  else if (statuses.every((status) => status === "failed")) next = "error";
+  else next = "upload_pending";
+  await supabase.from("games").update({ video_status: next }).eq("id", gameId);
+}
+
 export function useVideoAssets(gameId: string | undefined) {
   return useQuery({
     queryKey: ["video-assets", gameId],
@@ -116,7 +137,8 @@ export function useCreateVideoAsset() {
       if (error) throw error;
       return data as unknown as VideoAssetRecord;
     },
-    onSuccess: (asset) => {
+    onSuccess: async (asset) => {
+      await syncGameVideoStatus(asset.game_id);
       queryClient.invalidateQueries({ queryKey: ["video-assets"] });
       queryClient.invalidateQueries({ queryKey: ["games"] });
       queryClient.invalidateQueries({ queryKey: ["game", asset.game_id] });
@@ -148,10 +170,21 @@ export function useUpdateVideoAsset() {
         >
       >;
     }) => {
-      const { error } = await supabase.from("video_assets").update(patch).eq("id", id);
+      const { data, error } = await supabase
+        .from("video_assets")
+        .update(patch)
+        .eq("id", id)
+        .select("game_id")
+        .single();
       if (error) throw error;
+      return data.game_id as string;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["video-assets"] }),
+    onSuccess: async (gameId) => {
+      await syncGameVideoStatus(gameId);
+      queryClient.invalidateQueries({ queryKey: ["video-assets"] });
+      queryClient.invalidateQueries({ queryKey: ["games"] });
+      queryClient.invalidateQueries({ queryKey: ["game", gameId] });
+    },
   });
 }
 
@@ -159,15 +192,23 @@ export function useDeleteVideoAsset() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (asset: Pick<VideoAssetRecord, "id" | "storage_path">) => {
+      const { data: existing } = await supabase
+        .from("video_assets")
+        .select("game_id")
+        .eq("id", asset.id)
+        .maybeSingle();
       if (asset.storage_path) {
         await supabase.storage.from(FILM_BUCKET).remove([asset.storage_path]);
       }
       const { error } = await supabase.from("video_assets").delete().eq("id", asset.id);
       if (error) throw error;
+      return (existing?.game_id as string | undefined) ?? null;
     },
-    onSuccess: () => {
+    onSuccess: async (gameId) => {
+      if (gameId) await syncGameVideoStatus(gameId);
       queryClient.invalidateQueries({ queryKey: ["video-assets"] });
       queryClient.invalidateQueries({ queryKey: ["clips"] });
+      queryClient.invalidateQueries({ queryKey: ["games"] });
     },
   });
 }
