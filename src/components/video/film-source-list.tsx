@@ -56,6 +56,7 @@ export function FilmSourceList({
                 <IngestionBadge status={asset.ingestion_status} />
                 <AccessLevelTag accessLevel={asset.access_level} />
                 {asset.is_primary ? <Tag>Primary</Tag> : null}
+                <Tag>{storageLabel(asset.provider)}</Tag>
               </div>
               <p className="mt-1.5 text-xs text-muted-foreground">
                 {[
