@@ -103,6 +103,7 @@ function GameDetail() {
     try {
       await createEvent.mutateAsync({
         game_id: gameId,
+        sport_id: game!.sport_id,
         player_id: primaryPlayer?.player_id ?? null,
         event_type_key: typeKey,
         event_subtype: subtype || null,

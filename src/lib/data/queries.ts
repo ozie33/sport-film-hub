@@ -170,7 +170,7 @@ export type PlayerInput = Omit<PlayerRecord, "id" | "created_at">;
 export function useSavePlayer() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, values }: { id?: string; values: PlayerInput }) => {
+    mutationFn: async ({ id, values }: { id?: string | undefined; values: PlayerInput }) => {
       if (id) {
         const { error } = await supabase.from("players").update(values).eq("id", id);
         if (error) throw error;
@@ -332,6 +332,7 @@ export function useGameEvents(gameId: string) {
 
 export type EventInput = {
   game_id: string;
+  sport_id: string;
   player_id: string | null;
   event_type_key: string;
   event_subtype: string | null;
