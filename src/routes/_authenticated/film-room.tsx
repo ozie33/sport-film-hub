@@ -33,6 +33,54 @@ export const Route = createFileRoute("/_authenticated/film-room")({
   component: FilmRoom,
 });
 
+type DerivedPlaylist = { key: string; name: string; clips: ClipRecord[] };
+
+/**
+ * Playlists are derived, not stored: every marked play lands in the buckets it
+ * qualifies for, so the film room organizes itself as tagging continues.
+ */
+function buildPlaylists(clips: ClipRecord[]): DerivedPlaylist[] {
+  const playlists: DerivedPlaylist[] = [{ key: "all", name: "All clips", clips }];
+
+  const bySide = (side: string) =>
+    clips.filter((clip) => clip.events?.offense_or_defense === side);
+  for (const [side, name] of [
+    ["offense", "Offense"],
+    ["defense", "Defense"],
+  ] as const) {
+    const bucket = bySide(side);
+    if (bucket.length > 0) playlists.push({ key: `side-${side}`, name, clips: bucket });
+  }
+
+  const byPlayer = new Map<string, DerivedPlaylist>();
+  for (const clip of clips) {
+    if (!clip.player_id) continue;
+    const name = fullName(clip.players?.first_name, clip.players?.last_name) || "Player";
+    const existing = byPlayer.get(clip.player_id);
+    if (existing) existing.clips.push(clip);
+    else
+      byPlayer.set(clip.player_id, {
+        key: `player-${clip.player_id}`,
+        name: `All ${name} clips`,
+        clips: [clip],
+      });
+  }
+  playlists.push(...byPlayer.values());
+
+  const byCategory = new Map<string, DerivedPlaylist>();
+  for (const clip of clips) {
+    const key = clip.events?.event_type_key ?? clip.category;
+    if (!key) continue;
+    const name = clip.title ?? key;
+    const existing = byCategory.get(key);
+    if (existing) existing.clips.push(clip);
+    else byCategory.set(key, { key: `type-${key}`, name, clips: [clip] });
+  }
+  playlists.push(...byCategory.values());
+
+  return playlists;
+}
+
 function FilmRoom() {
   const { data: profile } = useProfile();
   const { data: games = [] } = useGames();
