@@ -18,7 +18,6 @@ import { Progress } from "@/components/ui/progress";
 import { CapabilityList } from "@/components/video/source-badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useCreateVideoAsset } from "@/lib/data/video-queries";
-import { formatDuration } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
   ACCEPTED_UPLOAD_EXTENSIONS,
@@ -356,7 +355,7 @@ function LinkForm({
     setSaving(true);
     try {
       let resolvedLabel = label.trim();
-      let duration: number | null = null;
+      const duration: number | null = null;
       let thumbnail = parsed.value.thumbnailUrl;
       let metadata = parsed.value.providerMetadata;
       let resolvedAccess = parsed.value.accessLevel;
@@ -378,7 +377,7 @@ function LinkForm({
         try {
           const access = await getHudlAccess();
           resolvedAccess = access.accessLevel;
-          metadata = { ...metadata, connection_status: access.status, detail: access.detail };
+          metadata = { ...metadata, hudl_access: access.accessLevel, detail: access.detail };
         } catch {
           // Fall back to link-only, which is the safe default.
         }
@@ -496,5 +495,3 @@ function CapabilitySummary({
     </div>
   );
 }
-
-export { formatDuration };
