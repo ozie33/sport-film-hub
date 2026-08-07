@@ -299,6 +299,7 @@ export type EventRecord = {
   id: string;
   game_id: string;
   player_id: string | null;
+  video_asset_id: string | null;
   event_type_key: string | null;
   event_subtype: string | null;
   outcome: string | null;
@@ -320,7 +321,7 @@ export function useGameEvents(gameId: string) {
       const { data, error } = await supabase
         .from("events")
         .select(
-          "id, game_id, player_id, event_type_key, event_subtype, outcome, possession_type, offense_or_defense, start_time, end_time, tags, notes, approved, source, confidence_score",
+          "id, game_id, player_id, video_asset_id, event_type_key, event_subtype, outcome, possession_type, offense_or_defense, start_time, end_time, tags, notes, approved, source, confidence_score",
         )
         .eq("game_id", gameId)
         .order("start_time");
