@@ -2,6 +2,7 @@ import { Star, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { Tag } from "@/components/common/status-badge";
 import { AccessLevelTag, IngestionBadge, SourceBadge } from "@/components/video/source-badge";
 import {
   useDeleteVideoAsset,
@@ -54,7 +55,7 @@ export function FilmSourceList({
                 <SourceBadge provider={asset.provider} />
                 <IngestionBadge status={asset.ingestion_status} />
                 <AccessLevelTag accessLevel={asset.access_level} />
-                {asset.is_primary ? <AccessLevelTag accessLevel="primary" /> : null}
+                {asset.is_primary ? <Tag>Primary</Tag> : null}
               </div>
               <p className="mt-1.5 text-xs text-muted-foreground">
                 {[
