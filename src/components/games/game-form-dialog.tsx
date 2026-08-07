@@ -24,7 +24,20 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { AddFilmPanel } from "@/components/video/add-film-panel";
 import { useVideoAssets } from "@/lib/data/video-queries";
-import { useCreateGame, usePlayers, useProfile, useSports } from "@/lib/data/queries";
+import {
+  useCreateGame,
+  usePlayers,
+  useProfile,
+  useSportPositions,
+  useSports,
+} from "@/lib/data/queries";
+import {
+  currentMembership,
+  teamDisplayName,
+  usePlayerMemberships,
+  useTeams,
+} from "@/lib/data/identity-queries";
+import { TeamFormDialog } from "@/components/teams/team-form-dialog";
 import { fullName } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -53,10 +66,48 @@ export function GameFormDialog({
   const [isHome, setIsHome] = useState("home");
   const [notes, setNotes] = useState("");
 
+  // Team context — auto-filled from the player's current membership, always overridable.
+  const [teamId, setTeamId] = useState("");
+  const [season, setSeason] = useState("");
+  const [jerseyNumber, setJerseyNumber] = useState("");
+  const [positionId, setPositionId] = useState("");
+  const [primaryColor, setPrimaryColor] = useState("");
+  const [secondaryColor, setSecondaryColor] = useState("");
+  const [coachName, setCoachName] = useState("");
+  const [teamDialogOpen, setTeamDialogOpen] = useState(false);
+
+  const { data: teams = [] } = useTeams();
+  const { data: memberships = [] } = usePlayerMemberships(playerId || null);
+  const { data: positions = [] } = useSportPositions(sportId || null);
+
   useEffect(() => {
     if (!open) return;
     setSportId(profile?.primary_sport_id ?? sports[0]?.id ?? "");
   }, [open, profile, sports]);
+
+  // Applies the athlete's current team context whenever the player selection changes.
+  useEffect(() => {
+    if (!playerId) return;
+    const membership = currentMembership(memberships);
+    if (!membership) return;
+    setTeamId(membership.team_id);
+    setJerseyNumber(membership.jersey_number ?? "");
+    setPositionId(membership.position_id ?? "");
+    setSeason(membership.season ?? membership.teams?.season ?? "");
+    setPrimaryColor(membership.teams?.primary_color ?? "");
+    setSecondaryColor(membership.teams?.secondary_color ?? "");
+    setCoachName(membership.teams?.coach_name ?? "");
+  }, [playerId, memberships]);
+
+  function applyTeamDefaults(nextTeamId: string) {
+    setTeamId(nextTeamId);
+    const team = teams.find((candidate) => candidate.id === nextTeamId);
+    if (!team) return;
+    setPrimaryColor(team.primary_color ?? "");
+    setSecondaryColor(team.secondary_color ?? "");
+    setCoachName(team.coach_name ?? "");
+    if (team.season) setSeason(team.season);
+  }
 
   function resetAll() {
     setStep(1);
@@ -66,6 +117,13 @@ export function GameFormDialog({
     setGameDate("");
     setPlayerId("");
     setNotes("");
+    setTeamId("");
+    setSeason("");
+    setJerseyNumber("");
+    setPositionId("");
+    setPrimaryColor("");
+    setSecondaryColor("");
+    setCoachName("");
   }
 
   async function handleSubmit(formEvent: React.FormEvent) {
@@ -83,6 +141,13 @@ export function GameFormDialog({
         is_home: isHome === "home",
         notes: notes.trim() || null,
         player_ids: playerId ? [playerId] : [],
+        team_id: teamId || null,
+        season: season.trim() || null,
+        jersey_number: jerseyNumber.trim() || null,
+        position_id: positionId || null,
+        uniform_primary_color: primaryColor || null,
+        uniform_secondary_color: secondaryColor || null,
+        coach_name: coachName.trim() || null,
       });
       toast.success("Game created. Now attach the film.");
       setCreatedGameId(gameId);
@@ -227,6 +292,96 @@ export function GameFormDialog({
               placeholder="What should the analysis focus on?"
             />
           </div>
+          <section className="space-y-4 rounded-xl border border-border bg-surface/60 p-4">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <p className="label-caps text-xs text-primary">Team context</p>
+                <p className="text-xs text-muted-foreground">
+                  Stored with the game so future analysis knows the uniform and number.
+                </p>
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={() => setTeamDialogOpen(true)}>
+                New team
+              </Button>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label>Which team?</Label>
+                <Select value={teamId} onValueChange={applyTeamDefaults}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={teams.length ? "Select a team" : "No teams yet"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {teams.map((team) => (
+                      <SelectItem key={team.id} value={team.id}>
+                        {teamDisplayName(team)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="game-season">Season</Label>
+                <Input
+                  id="game-season"
+                  value={season}
+                  placeholder="2025-26"
+                  onChange={(inputEvent) => setSeason(inputEvent.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="game-jersey">Jersey number</Label>
+                <Input
+                  id="game-jersey"
+                  value={jerseyNumber}
+                  onChange={(inputEvent) => setJerseyNumber(inputEvent.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Position</Label>
+                <Select value={positionId} onValueChange={setPositionId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Optional" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {positions.map((position) => (
+                      <SelectItem key={position.id} value={position.id}>
+                        {position.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="game-coach">Coach</Label>
+                <Input
+                  id="game-coach"
+                  value={coachName}
+                  onChange={(inputEvent) => setCoachName(inputEvent.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="game-uniform-primary">Uniform primary</Label>
+                <Input
+                  id="game-uniform-primary"
+                  type="color"
+                  className="h-10 p-1"
+                  value={primaryColor || "#f97316"}
+                  onChange={(inputEvent) => setPrimaryColor(inputEvent.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="game-uniform-secondary">Uniform secondary</Label>
+                <Input
+                  id="game-uniform-secondary"
+                  type="color"
+                  className="h-10 p-1"
+                  value={secondaryColor || "#111827"}
+                  onChange={(inputEvent) => setSecondaryColor(inputEvent.target.value)}
+                />
+              </div>
+            </div>
+          </section>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Cancel
@@ -239,6 +394,12 @@ export function GameFormDialog({
         </form>
         )}
       </DialogContent>
+      <TeamFormDialog
+        open={teamDialogOpen}
+        onOpenChange={setTeamDialogOpen}
+        defaultSportId={sportId || null}
+        onSaved={(newTeamId) => setTeamId(newTeamId)}
+      />
     </Dialog>
   );
 }

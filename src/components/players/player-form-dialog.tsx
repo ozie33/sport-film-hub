@@ -49,6 +49,8 @@ export function PlayerFormDialog({
   const [teamName, setTeamName] = useState("");
   const [jersey, setJersey] = useState("");
   const [height, setHeight] = useState("");
+  const [weight, setWeight] = useState("");
+  const [birthday, setBirthday] = useState("");
   const [gradYear, setGradYear] = useState("");
   const [hand, setHand] = useState("");
   const [notes, setNotes] = useState("");
@@ -64,6 +66,8 @@ export function PlayerFormDialog({
     setTeamName(player?.team_name ?? "");
     setJersey(player?.jersey_number ?? "");
     setHeight(player?.height ?? "");
+    setWeight(player?.weight ?? "");
+    setBirthday(player?.birthday ?? "");
     setGradYear(player?.graduation_year ? String(player.graduation_year) : "");
     setHand(player?.dominant_hand ?? "");
     setNotes(player?.notes ?? "");
@@ -87,6 +91,8 @@ export function PlayerFormDialog({
           jersey_number: jersey.trim() || null,
           position_id: positionId || null,
           height: height.trim() || null,
+          weight: weight.trim() || null,
+          birthday: birthday || null,
           graduation_year: gradYear ? Number(gradYear) : null,
           dominant_hand: hand || null,
           notes: notes.trim() || null,
@@ -190,6 +196,24 @@ export function PlayerFormDialog({
                 inputMode="numeric"
                 value={gradYear}
                 onChange={(inputEvent) => setGradYear(inputEvent.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="player-weight">Weight</Label>
+              <Input
+                id="player-weight"
+                placeholder="185 lb"
+                value={weight}
+                onChange={(inputEvent) => setWeight(inputEvent.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="player-birthday">Birthday</Label>
+              <Input
+                id="player-birthday"
+                type="date"
+                value={birthday}
+                onChange={(inputEvent) => setBirthday(inputEvent.target.value)}
               />
             </div>
             <div className="space-y-1.5 sm:col-span-2">

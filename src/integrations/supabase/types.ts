@@ -424,6 +424,53 @@ export type Database = {
           },
         ]
       }
+      external_reference_links: {
+        Row: {
+          active: boolean
+          created_at: string
+          created_by: string | null
+          id: string
+          label: string | null
+          notes: string | null
+          player_id: string
+          provider: Database["public"]["Enums"]["external_link_provider"]
+          updated_at: string
+          url: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          label?: string | null
+          notes?: string | null
+          player_id: string
+          provider?: Database["public"]["Enums"]["external_link_provider"]
+          updated_at?: string
+          url: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          label?: string | null
+          notes?: string | null
+          player_id?: string
+          provider?: Database["public"]["Enums"]["external_link_provider"]
+          updated_at?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "external_reference_links_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       game_players: {
         Row: {
           created_at: string
@@ -520,52 +567,80 @@ export type Database = {
         Row: {
           analysis_status: Database["public"]["Enums"]["workflow_status"]
           clip_count: number
+          coach_name: string | null
           created_at: string
           game_date: string | null
           id: string
           is_home: boolean | null
+          jersey_number: string | null
           metadata: Json
           notes: string | null
           opponent: string | null
           owner_id: string
+          position_id: string | null
+          season: string | null
           sport_id: string
+          team_id: string | null
           title: string
+          uniform_primary_color: string | null
+          uniform_secondary_color: string | null
           updated_at: string
           video_status: Database["public"]["Enums"]["workflow_status"]
         }
         Insert: {
           analysis_status?: Database["public"]["Enums"]["workflow_status"]
           clip_count?: number
+          coach_name?: string | null
           created_at?: string
           game_date?: string | null
           id?: string
           is_home?: boolean | null
+          jersey_number?: string | null
           metadata?: Json
           notes?: string | null
           opponent?: string | null
           owner_id?: string
+          position_id?: string | null
+          season?: string | null
           sport_id: string
+          team_id?: string | null
           title: string
+          uniform_primary_color?: string | null
+          uniform_secondary_color?: string | null
           updated_at?: string
           video_status?: Database["public"]["Enums"]["workflow_status"]
         }
         Update: {
           analysis_status?: Database["public"]["Enums"]["workflow_status"]
           clip_count?: number
+          coach_name?: string | null
           created_at?: string
           game_date?: string | null
           id?: string
           is_home?: boolean | null
+          jersey_number?: string | null
           metadata?: Json
           notes?: string | null
           opponent?: string | null
           owner_id?: string
+          position_id?: string | null
+          season?: string | null
           sport_id?: string
+          team_id?: string | null
           title?: string
+          uniform_primary_color?: string | null
+          uniform_secondary_color?: string | null
           updated_at?: string
           video_status?: Database["public"]["Enums"]["workflow_status"]
         }
         Relationships: [
+          {
+            foreignKeyName: "games_position_id_fkey"
+            columns: ["position_id"]
+            isOneToOne: false
+            referencedRelation: "sport_positions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "games_sport_id_fkey"
             columns: ["sport_id"]
@@ -573,10 +648,163 @@ export type Database = {
             referencedRelation: "sports"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "games_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      player_reference_media: {
+        Row: {
+          active: boolean
+          ai_generated: boolean
+          confidence_score: number | null
+          created_at: string
+          file_reference: string | null
+          id: string
+          metadata: Json
+          mime_type: string | null
+          notes: string | null
+          player_id: string
+          provider: string
+          reference_type: Database["public"]["Enums"]["player_reference_type"]
+          source_game_id: string | null
+          thumbnail_url: string | null
+          updated_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          active?: boolean
+          ai_generated?: boolean
+          confidence_score?: number | null
+          created_at?: string
+          file_reference?: string | null
+          id?: string
+          metadata?: Json
+          mime_type?: string | null
+          notes?: string | null
+          player_id: string
+          provider?: string
+          reference_type?: Database["public"]["Enums"]["player_reference_type"]
+          source_game_id?: string | null
+          thumbnail_url?: string | null
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          active?: boolean
+          ai_generated?: boolean
+          confidence_score?: number | null
+          created_at?: string
+          file_reference?: string | null
+          id?: string
+          metadata?: Json
+          mime_type?: string | null
+          notes?: string | null
+          player_id?: string
+          provider?: string
+          reference_type?: Database["public"]["Enums"]["player_reference_type"]
+          source_game_id?: string | null
+          thumbnail_url?: string | null
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "player_reference_media_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "player_reference_media_source_game_id_fkey"
+            columns: ["source_game_id"]
+            isOneToOne: false
+            referencedRelation: "games"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      player_team_memberships: {
+        Row: {
+          active: boolean
+          created_at: string
+          end_date: string | null
+          id: string
+          is_current: boolean
+          jersey_number: string | null
+          metadata: Json
+          player_id: string
+          position_id: string | null
+          position_label: string | null
+          season: string | null
+          start_date: string | null
+          team_id: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          end_date?: string | null
+          id?: string
+          is_current?: boolean
+          jersey_number?: string | null
+          metadata?: Json
+          player_id: string
+          position_id?: string | null
+          position_label?: string | null
+          season?: string | null
+          start_date?: string | null
+          team_id: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          end_date?: string | null
+          id?: string
+          is_current?: boolean
+          jersey_number?: string | null
+          metadata?: Json
+          player_id?: string
+          position_id?: string | null
+          position_label?: string | null
+          season?: string | null
+          start_date?: string | null
+          team_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "player_team_memberships_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "player_team_memberships_position_id_fkey"
+            columns: ["position_id"]
+            isOneToOne: false
+            referencedRelation: "sport_positions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "player_team_memberships_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
         ]
       }
       players: {
         Row: {
+          birthday: string | null
           created_at: string
           dominant_hand: string | null
           first_name: string
@@ -593,8 +821,10 @@ export type Database = {
           sport_id: string
           team_name: string | null
           updated_at: string
+          weight: string | null
         }
         Insert: {
+          birthday?: string | null
           created_at?: string
           dominant_hand?: string | null
           first_name: string
@@ -611,8 +841,10 @@ export type Database = {
           sport_id: string
           team_name?: string | null
           updated_at?: string
+          weight?: string | null
         }
         Update: {
+          birthday?: string | null
           created_at?: string
           dominant_hand?: string | null
           first_name?: string
@@ -629,6 +861,7 @@ export type Database = {
           sport_id?: string
           team_name?: string | null
           updated_at?: string
+          weight?: string | null
         }
         Relationships: [
           {
@@ -998,6 +1231,65 @@ export type Database = {
         }
         Relationships: []
       }
+      teams: {
+        Row: {
+          coach_name: string | null
+          created_at: string
+          id: string
+          level: string | null
+          metadata: Json
+          notes: string | null
+          organization_name: string | null
+          owner_id: string
+          primary_color: string | null
+          season: string | null
+          secondary_color: string | null
+          sport_id: string | null
+          team_name: string
+          updated_at: string
+        }
+        Insert: {
+          coach_name?: string | null
+          created_at?: string
+          id?: string
+          level?: string | null
+          metadata?: Json
+          notes?: string | null
+          organization_name?: string | null
+          owner_id: string
+          primary_color?: string | null
+          season?: string | null
+          secondary_color?: string | null
+          sport_id?: string | null
+          team_name: string
+          updated_at?: string
+        }
+        Update: {
+          coach_name?: string | null
+          created_at?: string
+          id?: string
+          level?: string | null
+          metadata?: Json
+          notes?: string | null
+          organization_name?: string | null
+          owner_id?: string
+          primary_color?: string | null
+          season?: string | null
+          secondary_color?: string | null
+          sport_id?: string | null
+          team_name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "teams_sport_id_fkey"
+            columns: ["sport_id"]
+            isOneToOne: false
+            referencedRelation: "sports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -1226,6 +1518,7 @@ export type Database = {
     Functions: {
       can_view_clip: { Args: { _clip_id: string }; Returns: boolean }
       can_view_game: { Args: { _game_id: string }; Returns: boolean }
+      can_view_player: { Args: { _player_id: string }; Returns: boolean }
       can_view_playlist: { Args: { _playlist_id: string }; Returns: boolean }
       has_resource_share: {
         Args: {
@@ -1242,6 +1535,7 @@ export type Database = {
         Returns: boolean
       }
       owns_game: { Args: { _game_id: string }; Returns: boolean }
+      owns_player: { Args: { _player_id: string }; Returns: boolean }
       owns_playlist: { Args: { _playlist_id: string }; Returns: boolean }
       shares_identity_with: {
         Args: { _other_user_id: string }
@@ -1257,7 +1551,20 @@ export type Database = {
         | "done"
         | "failed"
       data_source: "manual" | "ai" | "ai_corrected"
+      external_link_provider:
+        | "instagram"
+        | "youtube"
+        | "hudl"
+        | "twitter"
+        | "other"
       play_side: "offense" | "defense" | "neutral" | "special"
+      player_reference_type:
+        | "headshot"
+        | "full_body"
+        | "practice"
+        | "game_crop"
+        | "reference_video"
+        | "other"
       provider_access_level:
         | "link_only"
         | "embed_available"
@@ -1438,7 +1745,22 @@ export const Constants = {
         "failed",
       ],
       data_source: ["manual", "ai", "ai_corrected"],
+      external_link_provider: [
+        "instagram",
+        "youtube",
+        "hudl",
+        "twitter",
+        "other",
+      ],
       play_side: ["offense", "defense", "neutral", "special"],
+      player_reference_type: [
+        "headshot",
+        "full_body",
+        "practice",
+        "game_crop",
+        "reference_video",
+        "other",
+      ],
       provider_access_level: [
         "link_only",
         "embed_available",
