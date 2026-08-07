@@ -36,14 +36,14 @@ export const Route = createFileRoute("/_authenticated/film-room")({
 function FilmRoom() {
   const { data: profile } = useProfile();
   const { data: games = [] } = useGames();
-  const { data: clips = [] } = useClips();
+  const { data: realClips = [] } = useClips();
   const demoMode = profile?.demo_mode ?? false;
   const [activeKey, setActiveKey] = useState(demoPlaylists[0]!.system_key);
   const [realKey, setRealKey] = useState("all");
 
-  const playlists = useMemo(() => buildPlaylists(clips), [clips]);
+  const playlists = useMemo(() => buildPlaylists(realClips), [realClips]);
 
-  if (clips.length > 0) {
+  if (realClips.length > 0) {
     const active = playlists.find((playlist) => playlist.key === realKey) ?? playlists[0]!;
     return (
       <AppShell>
