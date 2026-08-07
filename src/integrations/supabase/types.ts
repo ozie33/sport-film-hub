@@ -14,6 +14,113 @@ export type Database = {
   }
   public: {
     Tables: {
+      analysis_jobs: {
+        Row: {
+          analysis_type: string
+          completed_at: string | null
+          created_at: string
+          current_stage: string | null
+          error_code: string | null
+          error_message: string | null
+          external_job_id: string | null
+          game_id: string
+          id: string
+          identity_context: Json
+          is_demo: boolean
+          model_version: string | null
+          player_id: string | null
+          progress_percent: number
+          provider: string
+          requested_by: string | null
+          result_summary: Json
+          settings: Json
+          sport_id: string | null
+          started_at: string | null
+          status: Database["public"]["Enums"]["analysis_job_status"]
+          updated_at: string
+          video_asset_id: string | null
+        }
+        Insert: {
+          analysis_type?: string
+          completed_at?: string | null
+          created_at?: string
+          current_stage?: string | null
+          error_code?: string | null
+          error_message?: string | null
+          external_job_id?: string | null
+          game_id: string
+          id?: string
+          identity_context?: Json
+          is_demo?: boolean
+          model_version?: string | null
+          player_id?: string | null
+          progress_percent?: number
+          provider?: string
+          requested_by?: string | null
+          result_summary?: Json
+          settings?: Json
+          sport_id?: string | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["analysis_job_status"]
+          updated_at?: string
+          video_asset_id?: string | null
+        }
+        Update: {
+          analysis_type?: string
+          completed_at?: string | null
+          created_at?: string
+          current_stage?: string | null
+          error_code?: string | null
+          error_message?: string | null
+          external_job_id?: string | null
+          game_id?: string
+          id?: string
+          identity_context?: Json
+          is_demo?: boolean
+          model_version?: string | null
+          player_id?: string | null
+          progress_percent?: number
+          provider?: string
+          requested_by?: string | null
+          result_summary?: Json
+          settings?: Json
+          sport_id?: string | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["analysis_job_status"]
+          updated_at?: string
+          video_asset_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analysis_jobs_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "games"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analysis_jobs_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analysis_jobs_sport_id_fkey"
+            columns: ["sport_id"]
+            isOneToOne: false
+            referencedRelation: "sports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analysis_jobs_video_asset_id_fkey"
+            columns: ["video_asset_id"]
+            isOneToOne: false
+            referencedRelation: "video_assets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       app_user_connections: {
         Row: {
           account_label: string | null
@@ -43,6 +150,156 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      candidate_clips: {
+        Row: {
+          ai_confidence: number | null
+          ai_prediction: Json
+          analysis_job_id: string
+          candidate_reason: string | null
+          clip_id: string | null
+          corrected_player_id: string | null
+          correction_notes: string | null
+          created_at: string
+          end_time: number
+          game_id: string
+          id: string
+          is_demo: boolean
+          metadata: Json
+          original_end_time: number
+          original_player_id: string | null
+          original_start_time: number
+          player_id: string | null
+          review_status: Database["public"]["Enums"]["candidate_review_status"]
+          reviewed_at: string | null
+          reviewed_by: string | null
+          sequence_number: number
+          start_time: number
+          tags: string[]
+          track_id: string | null
+          updated_at: string
+          user_decision: string | null
+          video_asset_id: string | null
+          wrong_player: boolean
+        }
+        Insert: {
+          ai_confidence?: number | null
+          ai_prediction?: Json
+          analysis_job_id: string
+          candidate_reason?: string | null
+          clip_id?: string | null
+          corrected_player_id?: string | null
+          correction_notes?: string | null
+          created_at?: string
+          end_time: number
+          game_id: string
+          id?: string
+          is_demo?: boolean
+          metadata?: Json
+          original_end_time: number
+          original_player_id?: string | null
+          original_start_time: number
+          player_id?: string | null
+          review_status?: Database["public"]["Enums"]["candidate_review_status"]
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          sequence_number?: number
+          start_time: number
+          tags?: string[]
+          track_id?: string | null
+          updated_at?: string
+          user_decision?: string | null
+          video_asset_id?: string | null
+          wrong_player?: boolean
+        }
+        Update: {
+          ai_confidence?: number | null
+          ai_prediction?: Json
+          analysis_job_id?: string
+          candidate_reason?: string | null
+          clip_id?: string | null
+          corrected_player_id?: string | null
+          correction_notes?: string | null
+          created_at?: string
+          end_time?: number
+          game_id?: string
+          id?: string
+          is_demo?: boolean
+          metadata?: Json
+          original_end_time?: number
+          original_player_id?: string | null
+          original_start_time?: number
+          player_id?: string | null
+          review_status?: Database["public"]["Enums"]["candidate_review_status"]
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          sequence_number?: number
+          start_time?: number
+          tags?: string[]
+          track_id?: string | null
+          updated_at?: string
+          user_decision?: string | null
+          video_asset_id?: string | null
+          wrong_player?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "candidate_clips_analysis_job_id_fkey"
+            columns: ["analysis_job_id"]
+            isOneToOne: false
+            referencedRelation: "analysis_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "candidate_clips_clip_id_fkey"
+            columns: ["clip_id"]
+            isOneToOne: false
+            referencedRelation: "clips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "candidate_clips_corrected_player_id_fkey"
+            columns: ["corrected_player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "candidate_clips_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "games"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "candidate_clips_original_player_id_fkey"
+            columns: ["original_player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "candidate_clips_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "candidate_clips_track_id_fkey"
+            columns: ["track_id"]
+            isOneToOne: false
+            referencedRelation: "player_tracks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "candidate_clips_video_asset_id_fkey"
+            columns: ["video_asset_id"]
+            isOneToOne: false
+            referencedRelation: "video_assets"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       clips: {
         Row: {
@@ -657,6 +914,109 @@ export type Database = {
           },
         ]
       }
+      player_identity_confirmations: {
+        Row: {
+          analysis_job_id: string | null
+          bounding_box: Json
+          candidate_clip_id: string | null
+          confidence: number
+          created_at: string
+          created_by: string | null
+          frame_image_path: string | null
+          game_id: string
+          id: string
+          metadata: Json
+          notes: string | null
+          player_id: string
+          saved_to_reference_id: string | null
+          source: Database["public"]["Enums"]["identity_confirmation_source"]
+          timestamp_seconds: number
+          updated_at: string
+          video_asset_id: string | null
+        }
+        Insert: {
+          analysis_job_id?: string | null
+          bounding_box?: Json
+          candidate_clip_id?: string | null
+          confidence?: number
+          created_at?: string
+          created_by?: string | null
+          frame_image_path?: string | null
+          game_id: string
+          id?: string
+          metadata?: Json
+          notes?: string | null
+          player_id: string
+          saved_to_reference_id?: string | null
+          source?: Database["public"]["Enums"]["identity_confirmation_source"]
+          timestamp_seconds: number
+          updated_at?: string
+          video_asset_id?: string | null
+        }
+        Update: {
+          analysis_job_id?: string | null
+          bounding_box?: Json
+          candidate_clip_id?: string | null
+          confidence?: number
+          created_at?: string
+          created_by?: string | null
+          frame_image_path?: string | null
+          game_id?: string
+          id?: string
+          metadata?: Json
+          notes?: string | null
+          player_id?: string
+          saved_to_reference_id?: string | null
+          source?: Database["public"]["Enums"]["identity_confirmation_source"]
+          timestamp_seconds?: number
+          updated_at?: string
+          video_asset_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "identity_confirmations_candidate_fk"
+            columns: ["candidate_clip_id"]
+            isOneToOne: false
+            referencedRelation: "candidate_clips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "player_identity_confirmations_analysis_job_id_fkey"
+            columns: ["analysis_job_id"]
+            isOneToOne: false
+            referencedRelation: "analysis_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "player_identity_confirmations_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "games"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "player_identity_confirmations_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "player_identity_confirmations_saved_to_reference_id_fkey"
+            columns: ["saved_to_reference_id"]
+            isOneToOne: false
+            referencedRelation: "player_reference_media"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "player_identity_confirmations_video_asset_id_fkey"
+            columns: ["video_asset_id"]
+            isOneToOne: false
+            referencedRelation: "video_assets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       player_reference_media: {
         Row: {
           active: boolean
@@ -798,6 +1158,92 @@ export type Database = {
             columns: ["team_id"]
             isOneToOne: false
             referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      player_tracks: {
+        Row: {
+          analysis_job_id: string
+          average_confidence: number | null
+          created_at: string
+          end_time: number
+          game_id: string
+          id: string
+          identity_confidence: number | null
+          is_demo: boolean
+          metadata: Json
+          needs_confirmation: boolean
+          player_id: string | null
+          start_time: number
+          track_id: string
+          tracking_confidence: number | null
+          updated_at: string
+          video_asset_id: string | null
+        }
+        Insert: {
+          analysis_job_id: string
+          average_confidence?: number | null
+          created_at?: string
+          end_time: number
+          game_id: string
+          id?: string
+          identity_confidence?: number | null
+          is_demo?: boolean
+          metadata?: Json
+          needs_confirmation?: boolean
+          player_id?: string | null
+          start_time: number
+          track_id: string
+          tracking_confidence?: number | null
+          updated_at?: string
+          video_asset_id?: string | null
+        }
+        Update: {
+          analysis_job_id?: string
+          average_confidence?: number | null
+          created_at?: string
+          end_time?: number
+          game_id?: string
+          id?: string
+          identity_confidence?: number | null
+          is_demo?: boolean
+          metadata?: Json
+          needs_confirmation?: boolean
+          player_id?: string | null
+          start_time?: number
+          track_id?: string
+          tracking_confidence?: number | null
+          updated_at?: string
+          video_asset_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "player_tracks_analysis_job_id_fkey"
+            columns: ["analysis_job_id"]
+            isOneToOne: false
+            referencedRelation: "analysis_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "player_tracks_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "games"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "player_tracks_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "player_tracks_video_asset_id_fkey"
+            columns: ["video_asset_id"]
+            isOneToOne: false
+            referencedRelation: "video_assets"
             referencedColumns: ["id"]
           },
         ]
@@ -1543,7 +1989,20 @@ export type Database = {
       }
     }
     Enums: {
+      analysis_job_status:
+        | "not_started"
+        | "queued"
+        | "preparing_video"
+        | "identifying_player"
+        | "tracking_player"
+        | "generating_candidates"
+        | "ready_for_review"
+        | "needs_confirmation"
+        | "failed"
+        | "cancelled"
+        | "completed"
       app_role: "athlete" | "parent" | "coach" | "trainer" | "admin"
+      candidate_review_status: "pending" | "approved" | "rejected" | "edited"
       cleanup_state:
         | "not_required"
         | "pending"
@@ -1557,6 +2016,10 @@ export type Database = {
         | "hudl"
         | "twitter"
         | "other"
+      identity_confirmation_source:
+        | "user_confirmation"
+        | "user_correction"
+        | "ai_suggestion"
       play_side: "offense" | "defense" | "neutral" | "special"
       player_reference_type:
         | "headshot"
@@ -1736,7 +2199,21 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      analysis_job_status: [
+        "not_started",
+        "queued",
+        "preparing_video",
+        "identifying_player",
+        "tracking_player",
+        "generating_candidates",
+        "ready_for_review",
+        "needs_confirmation",
+        "failed",
+        "cancelled",
+        "completed",
+      ],
       app_role: ["athlete", "parent", "coach", "trainer", "admin"],
+      candidate_review_status: ["pending", "approved", "rejected", "edited"],
       cleanup_state: [
         "not_required",
         "pending",
@@ -1751,6 +2228,11 @@ export const Constants = {
         "hudl",
         "twitter",
         "other",
+      ],
+      identity_confirmation_source: [
+        "user_confirmation",
+        "user_correction",
+        "ai_suggestion",
       ],
       play_side: ["offense", "defense", "neutral", "special"],
       player_reference_type: [

@@ -16,6 +16,8 @@ import { FilmSourceList } from "@/components/video/film-source-list";
 import { MarkPlayPanel } from "@/components/video/mark-play-panel";
 import { CapabilityList, SourceBadge } from "@/components/video/source-badge";
 import { PlayerIdentitySummary } from "@/components/players/player-identity-summary";
+import { AnalyzePlayerCard } from "@/components/analysis/analyze-player-card";
+import { AnalysisHistory } from "@/components/analysis/analysis-history";
 import { AiReadinessPlaceholders } from "@/components/players/ai-readiness-placeholders";
 import type { FilmPlayerHandle } from "@/components/video/film-player-types";
 import { PLAY_SIDE_LABELS } from "@/lib/domain";
@@ -185,6 +187,32 @@ function GameDetail() {
           }}
         />
       ) : null}
+
+      <AnalyzePlayerCard
+        gameId={game.id}
+        asset={activeAsset}
+        player={
+          primaryLink
+            ? {
+                id: primaryLink.player_id,
+                name:
+                  fullName(primaryLink.players?.first_name, primaryLink.players?.last_name) ||
+                  "Player",
+              }
+            : null
+        }
+        gameContext={{
+          team: game.teams ? teamDisplayName(game.teams) : null,
+          jerseyNumber: game.jersey_number,
+          position: gamePositions.find((position) => position.id === game.position_id)?.name ?? null,
+          season: game.season,
+          primaryColor: game.uniform_primary_color,
+          secondaryColor: game.uniform_secondary_color,
+          gameDate: game.game_date,
+        }}
+      />
+
+      <AnalysisHistory gameId={game.id} />
 
       <AiReadinessPlaceholders />
 
