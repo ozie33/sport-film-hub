@@ -353,7 +353,9 @@ export function useDeleteLink(playerId: string) {
 
 /* --------------------------------- helpers ---------------------------------- */
 
-export function teamDisplayName(team: TeamRecord | null | undefined): string {
+export function teamDisplayName(
+  team: { team_name: string; organization_name: string | null } | null | undefined,
+): string {
   if (!team) return "Unknown team";
   return [team.organization_name, team.team_name].filter(Boolean).join(" · ");
 }
