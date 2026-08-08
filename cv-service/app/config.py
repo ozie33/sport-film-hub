@@ -44,3 +44,70 @@ class Settings:
 
 
 settings = Settings()
+
+
+class ConfigurationError(RuntimeError):
+    """Raised at startup when required configuration is missing or invalid."""
+
+
+def validate_settings(s: Settings = settings) -> list[str]:
+    """Fail fast with a clear message when the service is misconfigured.
+
+    Returns a list of non-fatal warnings; raises ConfigurationError on anything
+    that would make the service unable to do real work.
+    """
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    if not s.api_key:
+        errors.append(
+            "ANALYSIS_SERVICE_API_KEY is not set. The service refuses to run "
+            "unauthenticated. Set it to the same value as the application secret."
+        )
+    elif len(s.api_key) < 16:
+        errors.append(
+            "ANALYSIS_SERVICE_API_KEY is too short (min 16 characters) - use a "
+            "high-entropy random value."
+        )
+
+    try:
+        os.makedirs(s.work_dir, exist_ok=True)
+        probe = os.path.join(s.work_dir, ".write-test")
+        with open(probe, "w") as handle:
+            handle.write("ok")
+        os.remove(probe)
+    except OSError as error:
+        errors.append(
+            f"CV_WORK_DIR ({s.work_dir}) is not writable: {error}. Temporary film "
+            "cannot be downloaded."
+        )
+
+    if s.analysis_fps <= 0:
+        errors.append("ANALYSIS_FPS must be greater than 0.")
+    if s.detection_resolution < 320:
+        errors.append("ANALYSIS_DETECTION_RESOLUTION must be at least 320.")
+    if not 0 < s.detection_confidence < 1:
+        errors.append("ANALYSIS_DETECTION_CONFIDENCE must be between 0 and 1.")
+    if not 0 < s.confirmation_threshold < 1:
+        errors.append("ANALYSIS_CONFIRMATION_THRESHOLD must be between 0 and 1.")
+    if s.max_workers < 1:
+        errors.append("CV_MAX_WORKERS must be at least 1.")
+
+    if not os.environ.get("APP_BASE_URL"):
+        warnings.append(
+            "APP_BASE_URL is not set on the service. It is only used for outbound "
+            "callbacks/diagnostics; the application must also set it so Drive film "
+            "can be streamed."
+        )
+    torch_home = os.environ.get("TORCH_HOME")
+    if not torch_home:
+        warnings.append(
+            "TORCH_HOME is not set; detector weights will download to the default "
+            "cache on every fresh container. Set TORCH_HOME to a baked/persistent path."
+        )
+
+    if errors:
+        raise ConfigurationError(
+            "CV service configuration is invalid:\n  - " + "\n  - ".join(errors)
+        )
+    return warnings

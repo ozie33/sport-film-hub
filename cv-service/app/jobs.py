@@ -7,15 +7,17 @@ the HTTP contract does not change.
 from __future__ import annotations
 
 import threading
-import traceback
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Any
 
 from app.config import settings
+from app.logging_setup import get_logger
 from app.models import JobRequest
 from app.pipeline.run import run_job
+
+log = get_logger("cv.jobs")
 
 
 @dataclass
@@ -47,8 +49,23 @@ class JobRegistry:
             state = JobState(external_id=external_id, request=request)
             self._jobs[external_id] = state
             self._by_job_id[request.jobId] = external_id
+        log.info(
+            "job submitted job=%s external=%s player=%s confirmations=%d references=%d",
+            request.jobId,
+            external_id,
+            getattr(request, "playerId", "unknown"),
+            len(request.identityContext.confirmations),
+            len(request.references),
+        )
         self._pool.submit(self._run, state)
         return state
+
+    def active_count(self) -> int:
+        return sum(
+            1
+            for state in self._jobs.values()
+            if state.status not in {"ready_for_review", "needs_confirmation", "failed", "cancelled"}
+        )
 
     def get(self, external_id: str) -> JobState | None:
         return self._jobs.get(external_id)
@@ -58,6 +75,7 @@ class JobRegistry:
         if state and state.status not in {"ready_for_review", "failed"}:
             state.status = "cancelled"
             state.stage = "Cancelled"
+            log.info("job cancelled job=%s external=%s", state.request.jobId, external_id)
 
     def _run(self, state: JobState) -> None:
         def progress(status: str, stage: str, percent: int) -> None:
@@ -77,9 +95,17 @@ class JobRegistry:
                 "needs_confirmation" if needs and needs >= total else "ready_for_review"
             )
             state.stage = "Candidate clips created"
+            log.info(
+                "job complete job=%s status=%s tracks=%s candidates=%s",
+                state.request.jobId,
+                state.status,
+                results["summary"].get("tracks"),
+                results["summary"].get("candidates"),
+            )
             state.progress = 100
         except Exception as error:  # noqa: BLE001
             if state.status == "cancelled":
+                log.info("job cancelled during processing job=%s", state.request.jobId)
                 return
             state.status = "failed"
             message = str(error) or error.__class__.__name__
@@ -88,7 +114,13 @@ class JobRegistry:
             )
             state.error_message = message
             state.stage = None
-            traceback.print_exc()
+            log.error(
+                "job failed job=%s external=%s code=%s",
+                state.request.jobId,
+                state.external_id,
+                state.error_code,
+                exc_info=True,
+            )
 
 
 registry = JobRegistry()

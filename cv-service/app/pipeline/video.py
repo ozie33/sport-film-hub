@@ -17,6 +17,9 @@ import httpx
 import numpy as np
 
 from app.config import settings
+from app.logging_setup import get_logger, safe_source
+
+log = get_logger("cv.video")
 
 CHUNK = 1024 * 1024 * 4
 
@@ -27,7 +30,10 @@ class TempVideo:
     directory: str
 
     def cleanup(self) -> None:
+        existed = os.path.isdir(self.directory)
         shutil.rmtree(self.directory, ignore_errors=True)
+        if existed:
+            log.info("temp file deleted dir=%s", self.directory)
 
 
 def fetch_video(job_id: str, url: str) -> TempVideo:
@@ -35,13 +41,17 @@ def fetch_video(job_id: str, url: str) -> TempVideo:
     directory = os.path.join(settings.work_dir, job_id)
     os.makedirs(directory, exist_ok=True)
     path = os.path.join(directory, "source.mp4")
+    log.info("source download started job=%s source=%s", job_id, safe_source(url))
     with httpx.stream("GET", url, follow_redirects=True, timeout=120.0) as response:
         response.raise_for_status()
         with open(path, "wb") as handle:
             for chunk in response.iter_bytes(CHUNK):
                 handle.write(chunk)
-    if os.path.getsize(path) == 0:
+    size = os.path.getsize(path)
+    if size == 0:
+        log.error("source download produced empty file job=%s", job_id)
         raise RuntimeError("video_unavailable")
+    log.info("source download completed job=%s bytes=%d", job_id, size)
     return TempVideo(path=path, directory=directory)
 
 
