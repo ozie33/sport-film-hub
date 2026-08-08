@@ -1,10 +1,14 @@
 /**
  * External analysis-service adapter.
  *
- * The application never talks to a computer-vision model directly. It submits a
- * job to whatever provider is configured and reads back a structured result. A
- * future Python/GPU service only has to implement this HTTP contract — no
- * frontend or database redesign required.
+ * The application never runs computer vision itself. It submits a job to the
+ * configured provider and reads back a structured result. The production
+ * provider is the Python CV service in `cv-service/` (FastAPI + OpenCV +
+ * PyTorch); the mock provider exists only for development.
+ *
+ * Production NEVER silently falls back to mock. When no real service is
+ * configured (or it is unreachable) the job fails with
+ * `analysis_service_unavailable` and the UI says "Analysis service unavailable".
  */
 
 import {
@@ -16,12 +20,23 @@ import {
   type CandidateReason,
 } from "@/lib/analysis/analysis";
 
+export type AnalysisReference = {
+  kind: "confirmed_game_crop" | "game_crop" | "photo" | "reference_video";
+  /** Authorized, short-lived URL the CV service can fetch. */
+  url: string;
+  /** Only user-confirmed material is high trust. */
+  trust: "high" | "medium" | "low";
+  sourceGameId?: string | null;
+  capturedAt?: string | null;
+};
+
 export type AnalysisSubmitRequest = {
   jobId: string;
   gameId: string;
   videoAssetId: string;
   playerId: string;
   sportId: string | null;
+  sport: string | null;
   analysisType: string;
   /** Everything the tracker needs about *this* game's identity context. */
   identityContext: {
@@ -40,14 +55,26 @@ export type AnalysisSubmitRequest = {
       confidence: number;
     }[];
   };
+  /** Reference media the service may fetch to build appearance signatures. */
+  references: AnalysisReference[];
   video: {
     provider: string;
     accessLevel: string;
     durationSeconds: number | null;
+    /** Authorized, short-lived URL to the raw film. Temporary by contract. */
+    url: string | null;
+    mimeType?: string | null;
   };
   settings: {
     preRoll: number;
     postRoll: number;
+    analysisFps: number;
+    detectionResolution: number;
+    detectionConfidence: number;
+    identityHighThreshold: number;
+    identityMediumThreshold: number;
+    confirmationThreshold: number;
+    ballDetection: boolean;
   };
 };
 
@@ -79,10 +106,57 @@ export type AnalysisCandidateResult = {
   prediction: Record<string, unknown>;
 };
 
+export type AnalysisNeedsConfirmation = {
+  timestamp: number;
+  reason?: string | null;
+  candidates: {
+    trackId: string;
+    boundingBox: Record<string, unknown>;
+    identityConfidence: number;
+  }[];
+};
+
+export type AnalysisModelVersions = {
+  personDetectorVersion: string;
+  trackerVersion: string;
+  reidentificationVersion: string;
+  serviceVersion: string;
+};
+
+export type AnalysisMetrics = {
+  videoDurationSeconds: number | null;
+  analysisDurationSeconds: number | null;
+  framesAnalyzed: number;
+  detections: number;
+  tracks: number;
+  targetTrackChanges: number;
+  lowConfidenceIntervals: number;
+  confirmationsRequested: number;
+  candidateClips: number;
+};
+
+/** Sample frames with drawn boxes — admin/debug only, never shown to athletes. */
+export type AnalysisDebugFrame = {
+  timestamp: number;
+  imageUrl?: string | null;
+  imageBase64?: string | null;
+  boxes: {
+    trackId: string;
+    isTarget: boolean;
+    detectionConfidence: number;
+    identityConfidence: number;
+    box: { x: number; y: number; w: number; h: number };
+  }[];
+};
+
 export type AnalysisResults = {
   modelVersion: string;
+  modelVersions?: AnalysisModelVersions;
   tracks: AnalysisTrackResult[];
   candidates: AnalysisCandidateResult[];
+  needsConfirmation?: AnalysisNeedsConfirmation[];
+  metrics?: AnalysisMetrics;
+  debugFrames?: AnalysisDebugFrame[];
   summary: Record<string, unknown>;
 };
 
@@ -102,6 +176,30 @@ export type AnalysisProvider = {
   }) => Promise<AnalysisResults>;
   cancelAnalysisJob: (context: { externalJobId: string | null }) => Promise<void>;
 };
+
+/** Job-level analysis settings, configurable through environment variables. */
+export function resolveAnalysisSettings(overrides?: Record<string, unknown>) {
+  const num = (key: string, fallback: number) => {
+    const raw = process.env[key];
+    const parsed = raw === undefined ? NaN : Number(raw);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+  return {
+    preRoll: Number(overrides?.["pre_roll"] ?? num("ANALYSIS_PRE_ROLL", DEFAULT_PRE_ROLL)),
+    postRoll: Number(overrides?.["post_roll"] ?? num("ANALYSIS_POST_ROLL", DEFAULT_POST_ROLL)),
+    analysisFps: Number(overrides?.["analysis_fps"] ?? num("ANALYSIS_FPS", 5)),
+    detectionResolution: Number(
+      overrides?.["detection_resolution"] ?? num("ANALYSIS_DETECTION_RESOLUTION", 960),
+    ),
+    detectionConfidence: Number(
+      overrides?.["detection_confidence"] ?? num("ANALYSIS_DETECTION_CONFIDENCE", 0.35),
+    ),
+    identityHighThreshold: num("ANALYSIS_IDENTITY_HIGH", 0.8),
+    identityMediumThreshold: num("ANALYSIS_IDENTITY_MEDIUM", 0.55),
+    confirmationThreshold: num("ANALYSIS_CONFIRMATION_THRESHOLD", CONFIRMATION_THRESHOLD),
+    ballDetection: (process.env["ANALYSIS_BALL_DETECTION"] ?? "true") !== "false",
+  };
+}
 
 /* ------------------------------ mock provider ------------------------------ */
 
@@ -132,8 +230,8 @@ const MOCK_TIMELINE: { until: number; status: AnalysisJobStatus; stage: string }
 
 /**
  * Development-only provider. Produces sample tracks and candidates so the whole
- * review workflow can be exercised before a real CV service exists. Every row it
- * creates is flagged as demo output.
+ * review workflow can be exercised without a GPU. Every row it creates is
+ * flagged as demo output and it is never selected in production.
  */
 export const mockAnalysisProvider: AnalysisProvider = {
   key: "mock",
@@ -176,7 +274,6 @@ export const mockAnalysisProvider: AnalysisProvider = {
         metadata: {
           demo: true,
           signals: ["jersey_number", "uniform_colors", "body_proportions", "tracking_continuity"],
-          // Frame-level boxes stay in metadata; the relational table stays small.
           sample_boxes: [
             { t: Number(cursor.toFixed(2)), x: 0.4 + random() * 0.2, y: 0.35, w: 0.08, h: 0.22 },
           ],
@@ -186,13 +283,16 @@ export const mockAnalysisProvider: AnalysisProvider = {
       const reason = CANDIDATE_REASONS[Math.floor(random() * CANDIDATE_REASONS.length)]!;
       candidates.push({
         trackId,
-        startTime: Math.max(0, cursor - DEFAULT_PRE_ROLL),
-        endTime: Math.min(duration, cursor + involvement + DEFAULT_POST_ROLL),
+        startTime: Math.max(0, cursor - request.settings.preRoll),
+        endTime: Math.min(duration, cursor + involvement + request.settings.postRoll),
         confidence: Number((0.4 + random() * 0.58).toFixed(3)),
         reason,
         prediction: {
           demo: true,
-          involvement_window: { start: Number(cursor.toFixed(2)), end: Number((cursor + involvement).toFixed(2)) },
+          involvement_window: {
+            start: Number(cursor.toFixed(2)),
+            end: Number((cursor + involvement).toFixed(2)),
+          },
           pre_roll: request.settings.preRoll,
           post_roll: request.settings.postRoll,
           signals_used: ["jersey_number", "uniform_colors", "confirmed_frames"],
@@ -202,6 +302,12 @@ export const mockAnalysisProvider: AnalysisProvider = {
 
     return {
       modelVersion: "mock-identify-track-0.1",
+      modelVersions: {
+        personDetectorVersion: "mock-detector-0.1",
+        trackerVersion: "mock-tracker-0.1",
+        reidentificationVersion: "mock-reid-0.1",
+        serviceVersion: "mock-0.1",
+      },
       tracks,
       candidates,
       summary: {
@@ -217,21 +323,51 @@ export const mockAnalysisProvider: AnalysisProvider = {
 
 /* ------------------------------ http provider ------------------------------ */
 
+class AnalysisServiceUnavailable extends Error {
+  constructor(detail?: string) {
+    super(detail ? `analysis_service_unavailable: ${detail}` : "analysis_service_unavailable");
+    this.name = "AnalysisServiceUnavailable";
+  }
+}
+
+export const ANALYSIS_SERVICE_UNAVAILABLE_CODE = "analysis_service_unavailable";
+
+export function isServiceUnavailable(error: unknown): boolean {
+  return (
+    error instanceof AnalysisServiceUnavailable ||
+    (error instanceof Error && error.message.includes(ANALYSIS_SERVICE_UNAVAILABLE_CODE))
+  );
+}
+
+const REQUEST_TIMEOUT_MS = 20_000;
+
 /**
- * Provider-independent HTTP adapter. Any internal Python service, GPU inference
- * host or third-party video API that speaks this contract can be plugged in by
- * setting ANALYSIS_SERVICE_URL / ANALYSIS_SERVICE_API_KEY.
+ * Provider-independent HTTP adapter for the real CV service. Credentials live
+ * only in server env (`ANALYSIS_SERVICE_URL`, `ANALYSIS_SERVICE_API_KEY`) and
+ * never reach the browser.
  */
 function createHttpAnalysisProvider(baseUrl: string, apiKey: string | undefined): AnalysisProvider {
   async function call<T>(path: string, init: RequestInit): Promise<T> {
-    const response = await fetch(`${baseUrl.replace(/\/$/, "")}${path}`, {
-      ...init,
-      headers: {
-        "content-type": "application/json",
-        ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}),
-        ...(init.headers ?? {}),
-      },
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${baseUrl.replace(/\/$/, "")}${path}`, {
+        ...init,
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        headers: {
+          "content-type": "application/json",
+          ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}),
+          ...(init.headers ?? {}),
+        },
+      });
+    } catch (networkError) {
+      // Unreachable service: fail loudly, never degrade to demo output.
+      throw new AnalysisServiceUnavailable(
+        networkError instanceof Error ? networkError.message : "network error",
+      );
+    }
+    if (response.status >= 500 || response.status === 401 || response.status === 403) {
+      throw new AnalysisServiceUnavailable(`status ${response.status}`);
+    }
     if (!response.ok) {
       throw new Error(`analysis_service_${response.status}`);
     }
@@ -256,16 +392,31 @@ function createHttpAnalysisProvider(baseUrl: string, apiKey: string | undefined)
   };
 }
 
+/** True when a real CV endpoint is configured. */
+export function hasRealAnalysisService(): boolean {
+  return Boolean(process.env["ANALYSIS_SERVICE_URL"]);
+}
+
+/**
+ * Mock is opt-in only: it requires ANALYSIS_PROVIDER=mock AND the absence of a
+ * real endpoint. Anything else resolves to the real service, or fails.
+ */
+export function mockExplicitlyEnabled(): boolean {
+  return process.env["ANALYSIS_PROVIDER"] === "mock" && !hasRealAnalysisService();
+}
+
 export function resolveAnalysisProvider(): AnalysisProvider {
   const baseUrl = process.env["ANALYSIS_SERVICE_URL"];
   if (baseUrl) {
     return createHttpAnalysisProvider(baseUrl, process.env["ANALYSIS_SERVICE_API_KEY"]);
   }
-  // No real endpoint configured: development mock only, always labelled.
-  return mockAnalysisProvider;
+  if (mockExplicitlyEnabled()) return mockAnalysisProvider;
+  // No real endpoint and mock not explicitly enabled: never fake a result.
+  throw new AnalysisServiceUnavailable("ANALYSIS_SERVICE_URL is not configured");
 }
 
 export function providerForKey(key: string): AnalysisProvider {
+  // Existing mock jobs keep resolving to mock so history stays readable.
   if (key === "mock") return mockAnalysisProvider;
   return resolveAnalysisProvider();
 }
