@@ -8,17 +8,21 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@/integrations/supabase/types";
 import {
-  DEFAULT_POST_ROLL,
-  DEFAULT_PRE_ROLL,
   evaluateAnalysisEligibility,
   isActiveStatus,
   type AnalysisJobStatus,
 } from "@/lib/analysis/analysis";
 import {
+  isServiceUnavailable,
   providerForKey,
   resolveAnalysisProvider,
+  resolveAnalysisSettings,
   type AnalysisSubmitRequest,
 } from "@/lib/analysis/provider.server";
+import {
+  resolveFilmAccessUrl,
+  resolveReferenceAccess,
+} from "@/lib/analysis/video-access.server";
 
 type Client = SupabaseClient<Database>;
 
