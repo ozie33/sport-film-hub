@@ -183,3 +183,81 @@ The app hands the service a short-lived URL, never credentials:
 - **Google Drive** — `${APP_BASE_URL}/api/public/drive-stream/<assetId>?token=<hmac>`,
   the same proxy the in-app player uses; Drive OAuth tokens stay server-side.
 - **YouTube / Hudl embeds** — no raw video access, so they remain analysis-ineligible by design.
+
+## RUNPOD DEPLOYMENT
+
+The image is built and published automatically by GitHub Actions
+(`.github/workflows/cv-service-image.yml`) on every push to `main` that touches
+`cv-service/**`. No cloning, `pip install`, or building inside Runpod.
+
+### Container image
+
+```text
+ghcr.io/ozie33/sport-film-hub-cv:latest
+ghcr.io/ozie33/sport-film-hub-cv:sha-<git-commit-sha>   # pinned / rollback
+```
+
+Use `latest` for normal deploys, a `sha-...` tag to pin or roll back.
+
+### Port
+
+Exposed port: **8000** (HTTP). Runpod should expose 8000 as an HTTP port. The
+container honours `PORT` if the platform injects a different one.
+
+### Required Runpod environment variables
+
+Never baked into the image — always set at runtime:
+
+| Variable | Required | Value |
+| -------- | -------- | ----- |
+| `ANALYSIS_SERVICE_API_KEY` | **yes** | 32+ char random value, identical to the app secret |
+| `APP_BASE_URL` | recommended | `https://sport-film-hub.lovable.app` |
+| `PORT` | no | `8000` |
+| `CV_WORK_DIR` | no | `/tmp/cv-jobs` (must be writable; use a volume for large film) |
+| `OMP_NUM_THREADS` | no | match the pod's CPU count, e.g. `4` |
+| `CV_LOG_LEVEL` | no | `INFO` |
+
+The service refuses to boot without a valid `ANALYSIS_SERVICE_API_KEY` or a
+writable `CV_WORK_DIR`.
+
+### Health and readiness
+
+```bash
+curl -s https://<pod-host>/health   # 200 when configured and ready
+curl -s https://<pod-host>/ready    # 200 with versions, 503 while not ready
+```
+
+`/health` (also used by the container `HEALTHCHECK`) returns:
+
+```json
+{ "ok": true, "status": "healthy", "version": "cv-service-0.1.0", "device": "cpu",
+  "configured": true, "startupError": null, "gpuAvailable": false, "activeJobs": 0 }
+```
+
+Both endpoints are unauthenticated; all job endpoints require
+`Authorization: Bearer <ANALYSIS_SERVICE_API_KEY>`.
+
+### Verify GPU availability
+
+Start the pod on a CUDA host with the NVIDIA runtime (Runpod GPU pods do this
+automatically; locally use `docker run --gpus all`). Then:
+
+```bash
+curl -s https://<pod-host>/ready | grep -o '"gpuAvailable":[a-z]*'   # expect true
+curl -s https://<pod-host>/ready                                     # gpuName, torchVersion
+nvidia-smi                                                           # inside the pod shell
+```
+
+`gpuAvailable: false` on a GPU pod means the installed torch wheel is CPU-only —
+CPU inference still works, just slower (see throughput limits above).
+
+### Update the deployed image
+
+1. Push a change under `cv-service/**` to `main`; the workflow publishes
+   `:latest` and `:sha-<commit>` to GHCR.
+2. In Runpod, restart/redeploy the pod so it re-pulls the tag (set the image to
+   the new `sha-...` tag to pin an exact build).
+3. Confirm the rollout: `curl -s https://<pod-host>/health` and check
+   `/ready` reports the expected versions.
+
+Rollback = redeploy with the previous `sha-<commit>` tag.
