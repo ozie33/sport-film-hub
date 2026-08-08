@@ -123,7 +123,7 @@ async function buildRequest(
 export async function submitAnalysis(supabase: Client, userId: string, input: SubmitInput) {
   const { data: asset, error: assetError } = await supabase
     .from("video_assets")
-    .select("id, provider, access_level, duration, ingestion_status, game_id")
+    .select("id, provider, access_level, duration, ingestion_status, game_id, storage_path, mime_type")
     .eq("id", input.videoAssetId)
     .single();
   if (assetError || !asset) throw new Error("video_unavailable");
@@ -161,7 +161,15 @@ export async function submitAnalysis(supabase: Client, userId: string, input: Su
   });
   if (!eligibility.eligible) throw new Error(eligibility.code);
 
-  const provider = resolveAnalysisProvider();
+  // Throws analysis_service_unavailable when no real CV endpoint is configured
+  // and mock is not explicitly enabled — no silent demo fallback.
+  let provider;
+  try {
+    provider = resolveAnalysisProvider();
+  } catch (resolveError) {
+    if (isServiceUnavailable(resolveError)) throw new Error("analysis_service_unavailable");
+    throw resolveError;
+  }
   const team = game?.teams
     ? [game.teams.organization_name, game.teams.team_name].filter(Boolean).join(" · ")
     : null;
@@ -190,7 +198,7 @@ export async function submitAnalysis(supabase: Client, userId: string, input: Su
       provider: provider.key,
       is_demo: provider.isMock,
       requested_by: userId,
-      settings: { pre_roll: DEFAULT_PRE_ROLL, post_roll: DEFAULT_POST_ROLL } as never,
+      settings: resolveAnalysisSettings() as never,
       identity_context: identityContext as never,
       started_at: new Date().toISOString(),
       current_stage: "Queued",
@@ -200,11 +208,22 @@ export async function submitAnalysis(supabase: Client, userId: string, input: Su
   if (error || !job) throw error ?? new Error("analysis_failed");
 
   try {
-    const request = await buildRequest(supabase, job, {
-      provider: asset.provider as string,
-      access_level: asset.access_level as string,
-      duration: asset.duration as number | null,
-    });
+    const request = await buildRequest(
+      supabase,
+      job,
+      {
+        id: asset.id as string,
+        provider: asset.provider as string,
+        access_level: asset.access_level as string,
+        duration: asset.duration as number | null,
+        storage_path: asset.storage_path as string | null,
+        mime_type: asset.mime_type as string | null,
+      },
+      userId,
+    );
+    if (!provider.isMock && !request.video.url) {
+      throw new Error("video_unavailable");
+    }
     const { externalJobId } = await provider.submitAnalysisJob(request);
     const { data: updated } = await supabase
       .from("analysis_jobs")
@@ -214,16 +233,17 @@ export async function submitAnalysis(supabase: Client, userId: string, input: Su
       .single();
     return updated ?? job;
   } catch (submitError) {
+    const unavailable = isServiceUnavailable(submitError);
     await supabase
       .from("analysis_jobs")
       .update({
         status: "failed",
-        error_code: "analysis_failed",
+        error_code: unavailable ? "analysis_service_unavailable" : "analysis_failed",
         error_message: submitError instanceof Error ? submitError.message : "Submission failed",
         completed_at: new Date().toISOString(),
       })
       .eq("id", job.id);
-    throw submitError;
+    throw unavailable ? new Error("analysis_service_unavailable") : submitError;
   }
 }
 
@@ -242,16 +262,41 @@ export async function advanceAnalysis(supabase: Client, jobId: string) {
 
   const { data: asset } = await supabase
     .from("video_assets")
-    .select("provider, access_level, duration")
+    .select("id, provider, access_level, duration, storage_path, mime_type")
     .eq("id", job.video_asset_id!)
     .maybeSingle();
 
-  const provider = providerForKey(job.provider);
-  const request = await buildRequest(supabase, job, {
-    provider: (asset?.provider as string) ?? "upload",
-    access_level: (asset?.access_level as string) ?? "raw_video_available",
-    duration: (asset?.duration as number | null) ?? null,
-  });
+  let provider;
+  try {
+    provider = providerForKey(job.provider);
+  } catch (resolveError) {
+    if (!isServiceUnavailable(resolveError)) throw resolveError;
+    const { data: failed } = await supabase
+      .from("analysis_jobs")
+      .update({
+        status: "failed",
+        error_code: "analysis_service_unavailable",
+        error_message: "Analysis service unavailable",
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", job.id)
+      .select(JOB_COLUMNS)
+      .single();
+    return failed ?? job;
+  }
+  const request = await buildRequest(
+    supabase,
+    job,
+    {
+      id: (asset?.id as string) ?? job.video_asset_id!,
+      provider: (asset?.provider as string) ?? "upload",
+      access_level: (asset?.access_level as string) ?? "raw_video_available",
+      duration: (asset?.duration as number | null) ?? null,
+      storage_path: (asset?.storage_path as string | null) ?? null,
+      mime_type: (asset?.mime_type as string | null) ?? null,
+    },
+    job.requested_by,
+  );
 
   let status;
   try {
