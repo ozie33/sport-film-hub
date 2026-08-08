@@ -208,9 +208,27 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                         debug_frames.append(
                             {
                                 "timestamp": round(timestamp, 2),
-                                "trackId": track.track_id,
-                                "identityConfidence": round(score, 3),
-                                "image": image,
+                                "imageBase64": image,
+                                "boxes": [
+                                    {
+                                        "trackId": track.track_id,
+                                        "isTarget": True,
+                                        "detectionConfidence": round(
+                                            track.points[-1].detection_confidence, 3
+                                        ),
+                                        "identityConfidence": round(score, 3),
+                                        "box": {
+                                            "x": round(box[0] / max(1, frame.shape[1]), 4),
+                                            "y": round(box[1] / max(1, frame.shape[0]), 4),
+                                            "w": round(
+                                                (box[2] - box[0]) / max(1, frame.shape[1]), 4
+                                            ),
+                                            "h": round(
+                                                (box[3] - box[1]) / max(1, frame.shape[0]), 4
+                                            ),
+                                        },
+                                    }
+                                ],
                             }
                         )
 
@@ -278,40 +296,42 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
         return {
             "modelVersion": SERVICE_VERSION,
             "modelVersions": {
-                "service": SERVICE_VERSION,
-                "detector": PERSON_DETECTOR_VERSION,
-                "tracker": TRACKER_VERSION,
-                "reid": REID_VERSION,
+                "serviceVersion": SERVICE_VERSION,
+                "personDetectorVersion": PERSON_DETECTOR_VERSION,
+                "trackerVersion": TRACKER_VERSION,
+                "reidentificationVersion": REID_VERSION,
             },
             "tracks": tracks_payload,
             "candidates": candidates,
             "needsConfirmation": state.needs_confirmation[:20],
             "debugFrames": debug_frames,
             "metrics": {
-                "video_duration_seconds": round(duration or 0.0, 2),
-                "source_fps": round(info.fps, 2),
-                "analysis_fps": job_settings.analysisFps,
-                "frames_analyzed": frames_processed,
-                "detection_resolution": job_settings.detectionResolution,
-                "person_detections": detections_total,
-                "detections_per_frame": round(detections_total / max(1, frames_processed), 2),
-                "tracks_created": len(tracker.tracks),
-                "tracks_returned": len(tracks_payload),
-                "frames_with_target": target_frames,
-                "target_tracking_coverage": coverage,
-                "target_visible_seconds": round(analyzed_span, 2),
-                "identity_switches": state.switches,
-                "low_confidence_intervals": state.low_confidence_intervals,
-                "confirmations_supplied": len(confirmations),
-                "confirmations_matched": confirmation_matches,
-                "reference_images_used": len(gallery.high) + len(gallery.medium) + len(gallery.low),
-                "confirmed_references_used": len(gallery.high),
-                "ball_detected_frames": ball_frames,
-                "mean_identity_confidence": round(float(np.mean(identity_scores)), 3)
+                "videoDurationSeconds": round(duration or 0.0, 2),
+                "sourceFps": round(info.fps, 2),
+                "analysisFps": job_settings.analysisFps,
+                "framesAnalyzed": frames_processed,
+                "detectionResolution": job_settings.detectionResolution,
+                "detections": detections_total,
+                "detectionsPerFrame": round(detections_total / max(1, frames_processed), 2),
+                "tracks": len(tracks_payload),
+                "tracksCreated": len(tracker.tracks),
+                "framesWithTarget": target_frames,
+                "targetTrackingCoverage": coverage,
+                "targetVisibleSeconds": round(analyzed_span, 2),
+                "targetTrackChanges": state.switches,
+                "lowConfidenceIntervals": state.low_confidence_intervals,
+                "confirmationsRequested": len(state.needs_confirmation),
+                "confirmationsSupplied": len(confirmations),
+                "confirmationsMatched": confirmation_matches,
+                "referenceImagesUsed": len(gallery.high) + len(gallery.medium) + len(gallery.low),
+                "confirmedReferencesUsed": len(gallery.high),
+                "ballDetectedFrames": ball_frames,
+                "meanIdentityConfidence": round(float(np.mean(identity_scores)), 3)
                 if identity_scores
                 else 0.0,
-                "candidate_count": len(candidates),
-                "processing_seconds": round(time.time() - started, 2),
+                "candidateClips": len(candidates),
+                "analysisDurationSeconds": round(time.time() - started, 2),
+                "processingSeconds": round(time.time() - started, 2),
             },
             "summary": {
                 "tracks": len(tracks_payload),
