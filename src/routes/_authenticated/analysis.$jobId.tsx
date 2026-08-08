@@ -31,11 +31,13 @@ import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { FilmPlayer } from "@/components/video/film-player";
 import { IdentifyPlayerDialog } from "@/components/analysis/identify-player-dialog";
+import { AnalysisDiagnostics } from "@/components/analysis/analysis-diagnostics";
 import type { FilmPlayerHandle } from "@/components/video/film-player-types";
 import {
   candidateReasonLabel,
   CONFIDENCE_LABELS,
   confidenceTier,
+  providerLabel,
   REVIEW_STATUS_LABELS,
 } from "@/lib/analysis/analysis";
 import {
@@ -220,6 +222,7 @@ function AiReview() {
         description="Approve, reject or correct each candidate. Your corrections are stored as training data."
         actions={
           <div className="flex flex-wrap items-center gap-1.5">
+            <Tag>{providerLabel({ provider: job.provider, isDemo: job.is_demo }).label}</Tag>
             {job.is_demo ? <Tag>DEMO AI RESULT</Tag> : <Tag>AI Generated</Tag>}
             <Tag>{job.model_version ?? job.provider}</Tag>
           </div>
@@ -250,6 +253,13 @@ function AiReview() {
       </div>
 
       <Progress value={candidates.length ? (reviewed / candidates.length) * 100 : 0} />
+
+      <AnalysisDiagnostics
+        summary={job.result_summary}
+        provider={job.provider}
+        isDemo={job.is_demo}
+        modelVersion={job.model_version}
+      />
 
       {candidates.length === 0 ? (
         <EmptyState
