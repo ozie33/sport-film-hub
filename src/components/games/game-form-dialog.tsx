@@ -360,26 +360,9 @@ export function GameFormDialog({
                   onChange={(inputEvent) => setCoachName(inputEvent.target.value)}
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="game-uniform-primary">Uniform primary</Label>
-                <Input
-                  id="game-uniform-primary"
-                  type="color"
-                  className="h-10 p-1"
-                  value={primaryColor || "#f97316"}
-                  onChange={(inputEvent) => setPrimaryColor(inputEvent.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="game-uniform-secondary">Uniform secondary</Label>
-                <Input
-                  id="game-uniform-secondary"
-                  type="color"
-                  className="h-10 p-1"
-                  value={secondaryColor || "#111827"}
-                  onChange={(inputEvent) => setSecondaryColor(inputEvent.target.value)}
-                />
-              </div>
+              {/* Uniform colors are no longer entered by hand: they carry over from
+                  the team when known, and are otherwise learned from the confirmed
+                  game frames during Analyze Player. */}
             </div>
           </section>
           <DialogFooter>
