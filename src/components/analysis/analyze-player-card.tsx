@@ -59,7 +59,9 @@ export function AnalyzePlayerCard({
   ).length;
 
   const jersey = gameContext.jerseyNumber ?? membership?.jersey_number ?? null;
-  const identityReady = Boolean(player && jersey && photoCount >= 1);
+  // Reference Library material is the only identity requirement. Jersey number,
+  // team and uniform colours are optional confidence boosters.
+  const identityReady = Boolean(player && photoCount + videoCount + cropCount >= 1);
 
   const eligibility = evaluateAnalysisEligibility({
     asset,
@@ -130,7 +132,8 @@ export function AnalyzePlayerCard({
           </p>
         ) : (
           <p className="text-sm text-muted-foreground">
-            We'll confirm your athlete in a few frames first, then track them through this film.
+            We'll confirm your athlete in 3–5 frames from this game, learn their in-game
+            appearance from those frames, then track them through the film.
           </p>
         )}
 
