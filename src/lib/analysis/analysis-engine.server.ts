@@ -310,7 +310,9 @@ export async function advanceAnalysis(supabase: Client, jobId: string) {
       .from("analysis_jobs")
       .update({
         status: "failed",
-        error_code: "timeout",
+        error_code: isServiceUnavailable(statusError)
+          ? "analysis_service_unavailable"
+          : "timeout",
         error_message: statusError instanceof Error ? statusError.message : "Status check failed",
         completed_at: new Date().toISOString(),
       })
