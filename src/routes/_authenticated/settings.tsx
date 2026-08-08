@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { ConnectedServices } from "@/components/video/connected-services";
+import { AnalysisServiceStatus } from "@/components/analysis/analysis-service-status";
 import { supabase } from "@/integrations/supabase/client";
 import { ONBOARDING_ROLES, ROLE_LABELS, type AppRole } from "@/lib/domain";
 import {
@@ -205,6 +206,8 @@ function SettingsPage() {
       </SectionCard>
 
       <ConnectedServices />
+
+      <AnalysisServiceStatus />
 
       <SectionCard title="Account">
         <Button variant="outline" onClick={handleSignOut}>

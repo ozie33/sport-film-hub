@@ -10,6 +10,7 @@ import {
   ANALYSIS_STATUS_LABELS,
   analysisErrorMessage,
   isActiveStatus,
+  providerLabel,
 } from "@/lib/analysis/analysis";
 import { useAnalysisJob, useCancelAnalysis } from "@/lib/data/analysis-queries";
 import { cn } from "@/lib/utils";
@@ -113,7 +114,10 @@ export function AnalysisProgress({ jobId }: { jobId: string }) {
         ))}
       </ol>
       <div className="flex items-center justify-between gap-2">
-        {job.is_demo ? <Tag>DEMO AI RESULT</Tag> : <Tag>{job.provider}</Tag>}
+        <div className="flex items-center gap-1.5">
+          <Tag>{providerLabel({ provider: job.provider, isDemo: job.is_demo }).label}</Tag>
+          {job.is_demo ? <Tag>DEMO AI RESULT</Tag> : null}
+        </div>
         <div className="flex items-center gap-2">
           <p className="text-xs text-muted-foreground">
             You can leave this page — analysis keeps running.

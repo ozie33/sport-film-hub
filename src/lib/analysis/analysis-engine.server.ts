@@ -8,17 +8,21 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@/integrations/supabase/types";
 import {
-  DEFAULT_POST_ROLL,
-  DEFAULT_PRE_ROLL,
   evaluateAnalysisEligibility,
   isActiveStatus,
   type AnalysisJobStatus,
 } from "@/lib/analysis/analysis";
 import {
+  isServiceUnavailable,
   providerForKey,
   resolveAnalysisProvider,
+  resolveAnalysisSettings,
   type AnalysisSubmitRequest,
 } from "@/lib/analysis/provider.server";
+import {
+  resolveFilmAccessUrl,
+  resolveReferenceAccess,
+} from "@/lib/analysis/video-access.server";
 
 type Client = SupabaseClient<Database>;
 
@@ -43,7 +47,15 @@ async function buildRequest(
     identity_context: unknown;
     settings: unknown;
   },
-  asset: { provider: string; access_level: string; duration: number | null },
+  asset: {
+    id?: string;
+    provider: string;
+    access_level: string;
+    duration: number | null;
+    storage_path?: string | null;
+    mime_type?: string | null;
+  },
+  viewerId: string | null,
 ): Promise<AnalysisSubmitRequest> {
   const { data: confirmations } = await supabase
     .from("player_identity_confirmations")
@@ -54,12 +66,31 @@ async function buildRequest(
   const context = (job.identity_context ?? {}) as Record<string, unknown>;
   const settings = (job.settings ?? {}) as Record<string, unknown>;
 
+  const [videoUrl, references, sportRow] = await Promise.all([
+    asset.id
+      ? resolveFilmAccessUrl(
+          supabase,
+          {
+            id: asset.id,
+            provider: asset.provider,
+            storage_path: asset.storage_path ?? null,
+          },
+          viewerId ?? "service",
+        )
+      : Promise.resolve(null),
+    resolveReferenceAccess(supabase, job.player_id!, job.game_id),
+    job.sport_id
+      ? supabase.from("sports").select("key").eq("id", job.sport_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+
   return {
     jobId: job.id,
     gameId: job.game_id,
     videoAssetId: job.video_asset_id!,
     playerId: job.player_id!,
     sportId: job.sport_id,
+    sport: (sportRow as { data: { key: string } | null }).data?.key ?? null,
     analysisType: job.analysis_type,
     identityContext: {
       team: (context["team"] as string | null) ?? null,
@@ -77,22 +108,22 @@ async function buildRequest(
         confidence: Number(row.confidence),
       })),
     },
+    references,
     video: {
       provider: asset.provider,
       accessLevel: asset.access_level,
       durationSeconds: asset.duration,
+      url: videoUrl,
+      mimeType: asset.mime_type ?? null,
     },
-    settings: {
-      preRoll: Number(settings["pre_roll"] ?? DEFAULT_PRE_ROLL),
-      postRoll: Number(settings["post_roll"] ?? DEFAULT_POST_ROLL),
-    },
+    settings: resolveAnalysisSettings(settings),
   };
 }
 
 export async function submitAnalysis(supabase: Client, userId: string, input: SubmitInput) {
   const { data: asset, error: assetError } = await supabase
     .from("video_assets")
-    .select("id, provider, access_level, duration, ingestion_status, game_id")
+    .select("id, provider, access_level, duration, ingestion_status, game_id, storage_path, mime_type")
     .eq("id", input.videoAssetId)
     .single();
   if (assetError || !asset) throw new Error("video_unavailable");
@@ -130,7 +161,15 @@ export async function submitAnalysis(supabase: Client, userId: string, input: Su
   });
   if (!eligibility.eligible) throw new Error(eligibility.code);
 
-  const provider = resolveAnalysisProvider();
+  // Throws analysis_service_unavailable when no real CV endpoint is configured
+  // and mock is not explicitly enabled — no silent demo fallback.
+  let provider;
+  try {
+    provider = resolveAnalysisProvider();
+  } catch (resolveError) {
+    if (isServiceUnavailable(resolveError)) throw new Error("analysis_service_unavailable");
+    throw resolveError;
+  }
   const team = game?.teams
     ? [game.teams.organization_name, game.teams.team_name].filter(Boolean).join(" · ")
     : null;
@@ -159,7 +198,7 @@ export async function submitAnalysis(supabase: Client, userId: string, input: Su
       provider: provider.key,
       is_demo: provider.isMock,
       requested_by: userId,
-      settings: { pre_roll: DEFAULT_PRE_ROLL, post_roll: DEFAULT_POST_ROLL } as never,
+      settings: resolveAnalysisSettings() as never,
       identity_context: identityContext as never,
       started_at: new Date().toISOString(),
       current_stage: "Queued",
@@ -169,11 +208,22 @@ export async function submitAnalysis(supabase: Client, userId: string, input: Su
   if (error || !job) throw error ?? new Error("analysis_failed");
 
   try {
-    const request = await buildRequest(supabase, job, {
-      provider: asset.provider as string,
-      access_level: asset.access_level as string,
-      duration: asset.duration as number | null,
-    });
+    const request = await buildRequest(
+      supabase,
+      job,
+      {
+        id: asset.id as string,
+        provider: asset.provider as string,
+        access_level: asset.access_level as string,
+        duration: asset.duration as number | null,
+        storage_path: asset.storage_path as string | null,
+        mime_type: asset.mime_type as string | null,
+      },
+      userId,
+    );
+    if (!provider.isMock && !request.video.url) {
+      throw new Error("video_unavailable");
+    }
     const { externalJobId } = await provider.submitAnalysisJob(request);
     const { data: updated } = await supabase
       .from("analysis_jobs")
@@ -183,16 +233,17 @@ export async function submitAnalysis(supabase: Client, userId: string, input: Su
       .single();
     return updated ?? job;
   } catch (submitError) {
+    const unavailable = isServiceUnavailable(submitError);
     await supabase
       .from("analysis_jobs")
       .update({
         status: "failed",
-        error_code: "analysis_failed",
+        error_code: unavailable ? "analysis_service_unavailable" : "analysis_failed",
         error_message: submitError instanceof Error ? submitError.message : "Submission failed",
         completed_at: new Date().toISOString(),
       })
       .eq("id", job.id);
-    throw submitError;
+    throw unavailable ? new Error("analysis_service_unavailable") : submitError;
   }
 }
 
@@ -211,16 +262,41 @@ export async function advanceAnalysis(supabase: Client, jobId: string) {
 
   const { data: asset } = await supabase
     .from("video_assets")
-    .select("provider, access_level, duration")
+    .select("id, provider, access_level, duration, storage_path, mime_type")
     .eq("id", job.video_asset_id!)
     .maybeSingle();
 
-  const provider = providerForKey(job.provider);
-  const request = await buildRequest(supabase, job, {
-    provider: (asset?.provider as string) ?? "upload",
-    access_level: (asset?.access_level as string) ?? "raw_video_available",
-    duration: (asset?.duration as number | null) ?? null,
-  });
+  let provider;
+  try {
+    provider = providerForKey(job.provider);
+  } catch (resolveError) {
+    if (!isServiceUnavailable(resolveError)) throw resolveError;
+    const { data: failed } = await supabase
+      .from("analysis_jobs")
+      .update({
+        status: "failed",
+        error_code: "analysis_service_unavailable",
+        error_message: "Analysis service unavailable",
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", job.id)
+      .select(JOB_COLUMNS)
+      .single();
+    return failed ?? job;
+  }
+  const request = await buildRequest(
+    supabase,
+    job,
+    {
+      id: (asset?.id as string) ?? job.video_asset_id!,
+      provider: (asset?.provider as string) ?? "upload",
+      access_level: (asset?.access_level as string) ?? "raw_video_available",
+      duration: (asset?.duration as number | null) ?? null,
+      storage_path: (asset?.storage_path as string | null) ?? null,
+      mime_type: (asset?.mime_type as string | null) ?? null,
+    },
+    job.requested_by,
+  );
 
   let status;
   try {
@@ -234,7 +310,9 @@ export async function advanceAnalysis(supabase: Client, jobId: string) {
       .from("analysis_jobs")
       .update({
         status: "failed",
-        error_code: "timeout",
+        error_code: isServiceUnavailable(statusError)
+          ? "analysis_service_unavailable"
+          : "timeout",
         error_message: statusError instanceof Error ? statusError.message : "Status check failed",
         completed_at: new Date().toISOString(),
       })
@@ -244,7 +322,27 @@ export async function advanceAnalysis(supabase: Client, jobId: string) {
     return failed ?? job;
   }
 
-  if (status.status !== "ready_for_review" && status.status !== "completed") {
+  if (status.status === "failed") {
+    const { data: failed } = await supabase
+      .from("analysis_jobs")
+      .update({
+        status: "failed",
+        error_code: status.errorCode ?? "analysis_failed",
+        error_message: status.errorMessage ?? "Analysis failed",
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", job.id)
+      .select(JOB_COLUMNS)
+      .single();
+    return failed ?? job;
+  }
+
+  const resultsReady =
+    status.status === "ready_for_review" ||
+    status.status === "completed" ||
+    status.status === "needs_confirmation";
+
+  if (!resultsReady) {
     const { data: updated } = await supabase
       .from("analysis_jobs")
       .update({
@@ -269,6 +367,9 @@ export async function advanceAnalysis(supabase: Client, jobId: string) {
     externalJobId: job.external_job_id,
     request,
   });
+
+  // Debug frames are large; keep only a handful for the admin overlay.
+  const debugFrames = (results.debugFrames ?? []).slice(0, 4);
 
   const trackRows = results.tracks.map((track) => ({
     analysis_job_id: job.id,
@@ -326,7 +427,7 @@ export async function advanceAnalysis(supabase: Client, jobId: string) {
   const { data: finished } = await supabase
     .from("analysis_jobs")
     .update({
-      status: "ready_for_review",
+      status: status.status === "needs_confirmation" ? "needs_confirmation" : "ready_for_review",
       progress_percent: 100,
       current_stage: "Ready for review",
       model_version: results.modelVersion,
@@ -337,6 +438,12 @@ export async function advanceAnalysis(supabase: Client, jobId: string) {
         track_count: trackRows.length,
         needs_confirmation: needsConfirmation,
         tracking_lost_at: lostAt,
+        provider: job.provider,
+        is_demo: job.is_demo,
+        model_versions: results.modelVersions ?? null,
+        metrics: results.metrics ?? null,
+        needs_confirmation_intervals: results.needsConfirmation ?? [],
+        debug_frames: debugFrames,
       } as never,
     })
     .eq("id", job.id)
