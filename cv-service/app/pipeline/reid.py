@@ -68,6 +68,28 @@ def hex_to_bgr(value: str | None) -> np.ndarray | None:
     return np.array([b, g, r], dtype=np.float32)
 
 
+def bgr_to_hex(colour: np.ndarray | None) -> str | None:
+    if colour is None or colour.size < 3:
+        return None
+    b, g, r = (int(max(0, min(255, round(float(c))))) for c in colour[:3])
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def region_means(
+    frame: np.ndarray, box: tuple[float, float, float, float]
+) -> tuple[np.ndarray | None, np.ndarray | None]:
+    """Mean torso and leg BGR colour for one crop — the game-specific look."""
+    patch = crop(frame, box)
+    if patch.size == 0:
+        return None, None
+    height = patch.shape[0]
+    torso = patch[int(height * 0.15) : int(height * 0.55)]
+    legs = patch[int(height * 0.55) : int(height * 0.95)]
+    torso_mean = torso.reshape(-1, 3).mean(axis=0) if torso.size else None
+    legs_mean = legs.reshape(-1, 3).mean(axis=0) if legs.size else None
+    return torso_mean, legs_mean
+
+
 def uniform_affinity(
     frame: np.ndarray,
     box: tuple[float, float, float, float],
@@ -115,7 +137,9 @@ class ReferenceGallery:
     def score(self, vector: np.ndarray) -> float:
         """Trust-weighted best match. AI-generated crops never dominate."""
         best = 0.0
-        for weight, bucket in ((1.0, self.high), (0.75, self.medium), (0.4, self.low)):
+        # Confirmed in-game crops outweigh generic reference photos: they show
+        # what the athlete actually looks like in THIS game.
+        for weight, bucket in ((1.0, self.high), (0.6, self.medium), (0.3, self.low)):
             for reference in bucket:
                 best = max(best, weight * similarity(vector, reference))
         return best

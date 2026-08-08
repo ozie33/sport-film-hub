@@ -30,7 +30,13 @@ from app.pipeline.identify import (
     match_confirmation,
     normalized_box_to_pixels,
 )
-from app.pipeline.reid import ReferenceGallery, hex_to_bgr, signature
+from app.pipeline.reid import (
+    ReferenceGallery,
+    bgr_to_hex,
+    hex_to_bgr,
+    region_means,
+    signature,
+)
 
 _detector: PersonDetector | None = None
 
@@ -126,6 +132,10 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
 
         uniform_primary = hex_to_bgr(request.identityContext.uniformPrimaryColor)
         uniform_secondary = hex_to_bgr(request.identityContext.uniformSecondaryColor)
+        # Appearance learned from the user's confirmed game frames. When no
+        # uniform colours were supplied manually, these replace them.
+        confirmed_torso: list[np.ndarray] = []
+        confirmed_legs: list[np.ndarray] = []
 
         from app.pipeline.tracker import MultiObjectTracker
 
@@ -189,6 +199,15 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                     state.target_track_id = track.track_id
                     state.target_signature = sig
                     confirmation_matches += 1
+                    torso_mean, legs_mean = region_means(frame, target_box)
+                    if torso_mean is not None:
+                        confirmed_torso.append(torso_mean)
+                    if legs_mean is not None:
+                        confirmed_legs.append(legs_mean)
+                    if uniform_primary is None and confirmed_torso:
+                        uniform_primary = np.mean(confirmed_torso, axis=0).astype(np.float32)
+                    if uniform_secondary is None and confirmed_legs:
+                        uniform_secondary = np.mean(confirmed_legs, axis=0).astype(np.float32)
 
             chosen = choose_target(
                 frame,
@@ -349,6 +368,17 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
             "debugFrames": debug_frames,
             "metrics": {
                 "videoDurationSeconds": round(duration or 0.0, 2),
+                "gameAppearance": {
+                    "source": "confirmed_game_frames" if confirmed_torso else "manual_or_none",
+                    "confirmedCropsUsed": len(confirmed_torso),
+                    "uniformPrimaryColor": bgr_to_hex(uniform_primary),
+                    "uniformSecondaryColor": bgr_to_hex(uniform_secondary),
+                    "manualUniformSupplied": bool(
+                        request.identityContext.uniformPrimaryColor
+                        or request.identityContext.uniformSecondaryColor
+                    ),
+                    "jerseyNumberSupplied": bool(request.identityContext.jerseyNumber),
+                },
                 "sourceFps": round(info.fps, 2),
                 "analysisFps": job_settings.analysisFps,
                 "framesAnalyzed": frames_processed,

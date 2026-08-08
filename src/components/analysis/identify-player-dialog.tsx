@@ -162,9 +162,10 @@ export function IdentifyPlayerDialog({
         <DialogHeader>
           <DialogTitle>Identify your player</DialogTitle>
           <DialogDescription>
-            Confirm the identity context for this game, then click {playerName} in a few frames.
-            We use jersey number, uniform colors, body proportions and your confirmed frames —
-            never face recognition alone.
+            Click {playerName} in {MIN_IDENTITY_CONFIRMATIONS}–{TARGET_IDENTITY_CONFIRMATIONS}{" "}
+            frames from this game. We learn this game's uniform colors, body appearance and any
+            visible jersey evidence directly from those frames — never face recognition. Team,
+            jersey number and uniform colors below are optional boosters.
           </DialogDescription>
         </DialogHeader>
 
@@ -172,8 +173,10 @@ export function IdentifyPlayerDialog({
           <p className="text-sm font-semibold">{playerName}</p>
           <div className="mt-2 flex flex-wrap gap-1.5">
             <Tag>{context.team ?? "No team on this game"}</Tag>
-            <Tag>{context.jerseyNumber ? `#${context.jerseyNumber}` : "No jersey number"}</Tag>
-            <Tag>{context.position ?? "No position"}</Tag>
+            <Tag>
+              {context.jerseyNumber ? `#${context.jerseyNumber}` : "Jersey number optional"}
+            </Tag>
+            <Tag>{context.position ?? "Position optional"}</Tag>
             {context.season ? <Tag>{context.season}</Tag> : null}
             <Tag>{context.photoCount} reference photos</Tag>
             <Tag>{context.videoCount} reference videos</Tag>
@@ -199,7 +202,9 @@ export function IdentifyPlayerDialog({
               checked={contextConfirmed}
               onCheckedChange={(value) => setContextConfirmed(value === true)}
             />
-            <span>This team, jersey number and uniform information is correct for this game.</span>
+            <span>
+              Optional: this team, jersey number and uniform information is correct for this game.
+            </span>
           </label>
         </section>
 
@@ -333,7 +338,7 @@ export function IdentifyPlayerDialog({
             Cancel
           </Button>
           <Button
-            disabled={!contextConfirmed || !enough || starting}
+            disabled={!enough || starting}
             onClick={onStart}
             className={cn(starting && "opacity-80")}
           >
