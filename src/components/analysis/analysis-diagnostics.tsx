@@ -160,7 +160,7 @@ export function AnalysisDiagnostics({
             </div>
           ) : null}
         </div>
-      )}
+      ) : null}
     </SectionCard>
   );
 }
