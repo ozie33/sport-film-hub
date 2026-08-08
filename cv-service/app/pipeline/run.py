@@ -368,6 +368,17 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
             "debugFrames": debug_frames,
             "metrics": {
                 "videoDurationSeconds": round(duration or 0.0, 2),
+                "gameAppearance": {
+                    "source": "confirmed_game_frames" if confirmed_torso else "manual_or_none",
+                    "confirmedCropsUsed": len(confirmed_torso),
+                    "uniformPrimaryColor": bgr_to_hex(uniform_primary),
+                    "uniformSecondaryColor": bgr_to_hex(uniform_secondary),
+                    "manualUniformSupplied": bool(
+                        request.identityContext.uniformPrimaryColor
+                        or request.identityContext.uniformSecondaryColor
+                    ),
+                    "jerseyNumberSupplied": bool(request.identityContext.jerseyNumber),
+                },
                 "sourceFps": round(info.fps, 2),
                 "analysisFps": job_settings.analysisFps,
                 "framesAnalyzed": frames_processed,
