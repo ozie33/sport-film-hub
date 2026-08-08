@@ -17,7 +17,10 @@ from app.config import (
     TRACKER_VERSION,
     settings,
 )
+from app.logging_setup import get_logger
 from app.models import JobRequest
+
+log = get_logger("cv.pipeline")
 from app.pipeline import video as video_io
 from app.pipeline.candidates import TargetSample, build_candidates
 from app.pipeline.detector import PersonDetector, Detection
@@ -84,14 +87,37 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
     if not request.video.url:
         raise RuntimeError("video_unavailable")
 
+    log.info("job processing started job=%s", request.jobId)
     progress("preparing_video", "Retrieving authorized film", 5)
     temp = video_io.fetch_video(request.jobId, request.video.url)
 
     try:
         info = video_io.probe(temp.path)
         duration = request.video.durationSeconds or info.duration
+        log.info(
+            "video probed job=%s source_fps=%.2f frames=%d resolution=%dx%d duration=%.1fs",
+            request.jobId,
+            info.fps,
+            info.frame_count,
+            info.width,
+            info.height,
+            duration or 0.0,
+        )
         progress("identifying_player", "Loading reference media", 12)
         gallery = _load_reference_signatures(request.references)
+        log.info(
+            "reference media loaded job=%s images=%d confirmed=%d",
+            request.jobId,
+            len(gallery.high) + len(gallery.medium) + len(gallery.low),
+            len(gallery.high),
+        )
+        log.info(
+            "inference started job=%s device=%s analysis_fps=%.2f detection_resolution=%d",
+            request.jobId,
+            detector().device.type,
+            job_settings.analysisFps,
+            job_settings.detectionResolution,
+        )
 
         confirmations = sorted(
             request.identityContext.confirmations, key=lambda item: item.timestamp
@@ -240,6 +266,22 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                 else:
                     progress("tracking_player", "Tracking player", int(12 + ratio * 60))
 
+        log.info(
+            "frames decoded job=%s frames=%d", request.jobId, frames_processed
+        )
+        log.info(
+            "inference completed job=%s person_detections=%d ball_frames=%d",
+            request.jobId,
+            detections_total,
+            ball_frames,
+        )
+        log.info(
+            "tracking completed job=%s tracks=%d target_frames=%d target_track=%s",
+            request.jobId,
+            len(tracker.tracks),
+            target_frames,
+            state.target_track_id,
+        )
         progress("generating_candidates", "Finding player involvement", 88)
 
         tracks_payload = []
