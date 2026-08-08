@@ -1,21 +1,50 @@
+# Production image for the Player Analysis CV service.
+# CPU-only by default (sufficient for MVP validation); CUDA is used automatically
+# when the container is started on a GPU host with a CUDA-enabled torch build.
 FROM python:3.11-slim
 
 ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
-    TORCH_HOME=/models
+    # Model weight cache. Baked into the image at build time so cold starts do
+    # not download anything and no development-only path is required.
+    TORCH_HOME=/models \
+    HF_HOME=/models/hf \
+    XDG_CACHE_HOME=/models/cache \
+    # Temporary per-job film directory. Must be writable; overridable at runtime.
+    CV_WORK_DIR=/tmp/cv-jobs \
+    # Headless OpenCV: never try to open a display.
+    OPENCV_IO_ENABLE_OPENEXR=0 \
+    QT_QPA_PLATFORM=offscreen \
+    OMP_NUM_THREADS=4 \
+    CV_LOG_LEVEL=INFO \
+    PORT=8000
 
+# ffmpeg + libgl/libglib give OpenCV full video decoding in headless Linux.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ffmpeg libgl1 libglib2.0-0 \
+      ffmpeg libgl1 libglib2.0-0 curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /srv
 COPY requirements.txt .
-RUN pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
 
 # Warm the detector weights into the image so cold starts don't download them.
-RUN python -c "from app.pipeline.detector import PersonDetector; PersonDetector()" || true
+RUN mkdir -p /models "$CV_WORK_DIR" \
+    && python -c "from app.pipeline.detector import PersonDetector; PersonDetector()" \
+    && chmod -R a+rX /models
+
+# Run unprivileged; the app only needs to write to CV_WORK_DIR.
+RUN useradd --create-home --uid 10001 cvsvc \
+    && chown -R cvsvc:cvsvc /srv "$CV_WORK_DIR" /models
+USER cvsvc
 
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD curl -fsS "http://127.0.0.1:${PORT:-8000}/health" > /dev/null || exit 1
+
+# sh -c so ${PORT} can be overridden by the hosting platform.
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1 --timeout-keep-alive 75"]
