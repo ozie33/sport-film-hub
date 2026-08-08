@@ -206,7 +206,7 @@ export function evaluateAnalysisEligibility(input: {
       filmReady,
       code: "identity_incomplete",
       reason:
-        "We need a bit more identity context — team, jersey number and at least one reference photo.",
+        "Add at least one item to this athlete's Reference Library (a photo, reference video or confirmed game crop) so we know who to look for.",
     };
   }
 
