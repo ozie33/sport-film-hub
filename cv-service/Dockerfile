@@ -3,9 +3,28 @@
 # when the container is started on a GPU host with a CUDA-enabled torch build.
 FROM python:3.11-slim
 
+# Build metadata (supplied by CI; harmless defaults for local builds).
+ARG SERVICE_VERSION=cv-service-0.1.0
+ARG GIT_COMMIT=unknown
+ARG BUILD_DATE=unknown
+LABEL org.opencontainers.image.title="Player Analysis CV Service" \
+      org.opencontainers.image.version="${SERVICE_VERSION}" \
+      org.opencontainers.image.revision="${GIT_COMMIT}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      com.sportfilmhub.service-version="${SERVICE_VERSION}" \
+      com.sportfilmhub.git-commit="${GIT_COMMIT}" \
+      com.sportfilmhub.build-date="${BUILD_DATE}"
+
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
+    # Non-secret build metadata, readable at runtime for diagnostics.
+    CV_SERVICE_VERSION=${SERVICE_VERSION} \
+    CV_GIT_COMMIT=${GIT_COMMIT} \
+    CV_BUILD_DATE=${BUILD_DATE} \
+    # Enable NVIDIA GPU passthrough when the host runtime provides it.
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility \
     # Model weight cache. Baked into the image at build time so cold starts do
     # not download anything and no development-only path is required.
     TORCH_HOME=/models \
