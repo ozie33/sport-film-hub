@@ -322,7 +322,27 @@ export async function advanceAnalysis(supabase: Client, jobId: string) {
     return failed ?? job;
   }
 
-  if (status.status !== "ready_for_review" && status.status !== "completed") {
+  if (status.status === "failed") {
+    const { data: failed } = await supabase
+      .from("analysis_jobs")
+      .update({
+        status: "failed",
+        error_code: status.errorCode ?? "analysis_failed",
+        error_message: status.errorMessage ?? "Analysis failed",
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", job.id)
+      .select(JOB_COLUMNS)
+      .single();
+    return failed ?? job;
+  }
+
+  const resultsReady =
+    status.status === "ready_for_review" ||
+    status.status === "completed" ||
+    status.status === "needs_confirmation";
+
+  if (!resultsReady) {
     const { data: updated } = await supabase
       .from("analysis_jobs")
       .update({
@@ -347,6 +367,9 @@ export async function advanceAnalysis(supabase: Client, jobId: string) {
     externalJobId: job.external_job_id,
     request,
   });
+
+  // Debug frames are large; keep only a handful for the admin overlay.
+  const debugFrames = (results.debugFrames ?? []).slice(0, 4);
 
   const trackRows = results.tracks.map((track) => ({
     analysis_job_id: job.id,
@@ -404,7 +427,7 @@ export async function advanceAnalysis(supabase: Client, jobId: string) {
   const { data: finished } = await supabase
     .from("analysis_jobs")
     .update({
-      status: "ready_for_review",
+      status: status.status === "needs_confirmation" ? "needs_confirmation" : "ready_for_review",
       progress_percent: 100,
       current_stage: "Ready for review",
       model_version: results.modelVersion,
@@ -420,7 +443,7 @@ export async function advanceAnalysis(supabase: Client, jobId: string) {
         model_versions: results.modelVersions ?? null,
         metrics: results.metrics ?? null,
         needs_confirmation_intervals: results.needsConfirmation ?? [],
-        debug_frames: results.debugFrames ?? [],
+        debug_frames: debugFrames,
       } as never,
     })
     .eq("id", job.id)
