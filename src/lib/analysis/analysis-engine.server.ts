@@ -47,7 +47,15 @@ async function buildRequest(
     identity_context: unknown;
     settings: unknown;
   },
-  asset: { provider: string; access_level: string; duration: number | null },
+  asset: {
+    id?: string;
+    provider: string;
+    access_level: string;
+    duration: number | null;
+    storage_path?: string | null;
+    mime_type?: string | null;
+  },
+  viewerId: string | null,
 ): Promise<AnalysisSubmitRequest> {
   const { data: confirmations } = await supabase
     .from("player_identity_confirmations")
@@ -58,12 +66,31 @@ async function buildRequest(
   const context = (job.identity_context ?? {}) as Record<string, unknown>;
   const settings = (job.settings ?? {}) as Record<string, unknown>;
 
+  const [videoUrl, references, sportRow] = await Promise.all([
+    asset.id
+      ? resolveFilmAccessUrl(
+          supabase,
+          {
+            id: asset.id,
+            provider: asset.provider,
+            storage_path: asset.storage_path ?? null,
+          },
+          viewerId ?? "service",
+        )
+      : Promise.resolve(null),
+    resolveReferenceAccess(supabase, job.player_id!, job.game_id),
+    job.sport_id
+      ? supabase.from("sports").select("key").eq("id", job.sport_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+
   return {
     jobId: job.id,
     gameId: job.game_id,
     videoAssetId: job.video_asset_id!,
     playerId: job.player_id!,
     sportId: job.sport_id,
+    sport: (sportRow as { data: { key: string } | null }).data?.key ?? null,
     analysisType: job.analysis_type,
     identityContext: {
       team: (context["team"] as string | null) ?? null,
@@ -81,15 +108,15 @@ async function buildRequest(
         confidence: Number(row.confidence),
       })),
     },
+    references,
     video: {
       provider: asset.provider,
       accessLevel: asset.access_level,
       durationSeconds: asset.duration,
+      url: videoUrl,
+      mimeType: asset.mime_type ?? null,
     },
-    settings: {
-      preRoll: Number(settings["pre_roll"] ?? DEFAULT_PRE_ROLL),
-      postRoll: Number(settings["post_roll"] ?? DEFAULT_POST_ROLL),
-    },
+    settings: resolveAnalysisSettings(settings),
   };
 }
 
