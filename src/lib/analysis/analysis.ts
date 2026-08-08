@@ -216,6 +216,8 @@ export function evaluateAnalysisEligibility(input: {
 /* --------------------------------- errors ---------------------------------- */
 
 export const ANALYSIS_ERROR_MESSAGES: Record<string, string> = {
+  analysis_service_unavailable:
+    "Analysis service unavailable. No demo results were produced — try again once the analysis service is reachable.",
   video_unavailable: "We couldn't open the film for this game. Check the source and try again.",
   drive_auth_expired:
     "Your Google Drive authorization expired. Reconnect Drive in Settings and re-run analysis.",
@@ -249,4 +251,15 @@ export function clipSourceLabel(
   if (source === "ai") return approved ? "AI Verified" : "AI Generated";
   if (source === "ai_corrected") return "AI + User Edited";
   return "Manual";
+}
+
+/* ------------------------------ provider labels ----------------------------- */
+
+/** Honest provider attribution: real inference vs. development demo output. */
+export function providerLabel(input: { provider?: string | null; isDemo?: boolean | null }): {
+  label: "REAL CV" | "MOCK / DEMO";
+  isDemo: boolean;
+} {
+  const isDemo = Boolean(input.isDemo) || input.provider === "mock";
+  return { label: isDemo ? "MOCK / DEMO" : "REAL CV", isDemo };
 }
