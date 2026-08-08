@@ -415,6 +415,12 @@ export async function advanceAnalysis(supabase: Client, jobId: string) {
         track_count: trackRows.length,
         needs_confirmation: needsConfirmation,
         tracking_lost_at: lostAt,
+        provider: job.provider,
+        is_demo: job.is_demo,
+        model_versions: results.modelVersions ?? null,
+        metrics: results.metrics ?? null,
+        needs_confirmation_intervals: results.needsConfirmation ?? [],
+        debug_frames: results.debugFrames ?? [],
       } as never,
     })
     .eq("id", job.id)
