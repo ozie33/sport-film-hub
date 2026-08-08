@@ -80,13 +80,25 @@ def score_track(
     same_track = 1.0 if track.track_id == state.target_track_id else 0.0
     colour = uniform_affinity(frame, box, uniform_primary, uniform_secondary)
 
-    weights = {
-        "reference": 0.42 if gallery.has_confirmed else 0.25,
-        "continuity": 0.22,
-        "same_track": 0.14,
-        "colour": 0.14,
-        "jersey": 0.08,
-    }
+    # Confirmed game-frame crops are the dominant signal when present; team
+    # colours and jersey evidence are confidence boosters only.
+    weights = (
+        {
+            "reference": 0.50,
+            "continuity": 0.22,
+            "same_track": 0.12,
+            "colour": 0.10,
+            "jersey": 0.06,
+        }
+        if gallery.has_confirmed
+        else {
+            "reference": 0.25,
+            "continuity": 0.22,
+            "same_track": 0.14,
+            "colour": 0.14,
+            "jersey": 0.08,
+        }
+    )
     score = (
         weights["reference"] * reference_score
         + weights["continuity"] * continuity
