@@ -124,15 +124,27 @@ export type AnalysisModelVersions = {
 };
 
 export type AnalysisMetrics = {
-  videoDurationSeconds: number | null;
-  analysisDurationSeconds: number | null;
-  framesAnalyzed: number;
-  detections: number;
-  tracks: number;
-  targetTrackChanges: number;
-  lowConfidenceIntervals: number;
-  confirmationsRequested: number;
-  candidateClips: number;
+  videoDurationSeconds?: number | null;
+  analysisDurationSeconds?: number | null;
+  processingSeconds?: number | null;
+  framesAnalyzed?: number;
+  analysisFps?: number;
+  detections?: number;
+  detectionsPerFrame?: number;
+  tracks?: number;
+  targetTrackingCoverage?: number;
+  targetVisibleSeconds?: number;
+  targetTrackChanges?: number;
+  lowConfidenceIntervals?: number;
+  confirmationsRequested?: number;
+  confirmationsMatched?: number;
+  referenceImagesUsed?: number;
+  confirmedReferencesUsed?: number;
+  meanIdentityConfidence?: number;
+  ballDetectedFrames?: number;
+  candidateClips?: number;
+  /** Providers may report additional diagnostic counters. */
+  [key: string]: unknown;
 };
 
 /** Sample frames with drawn boxes — admin/debug only, never shown to athletes. */
