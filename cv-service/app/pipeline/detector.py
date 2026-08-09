@@ -97,11 +97,28 @@ class PersonDetector:
                     weights = fallback
                 self.model = YOLO(weights)
                 self.model.to(self.device)
-                if self.half:
-                    self.model.model.half()
-                self.model.fuse()
+                # Order matters: ultralytics `fuse()` runs a FLOPs probe with a
+                # float dummy tensor, so casting weights to fp16 first raises
+                # "expected mat1 and mat2 to have the same dtype". Fuse in fp32,
+                # then let `predict(half=True)` handle precision itself.
+                try:
+                    self.model.fuse()
+                except Exception as fuse_error:  # noqa: BLE001
+                    log.warning("yolo fuse skipped: %s", fuse_error)
                 self.backend = "yolo"
                 self.version = f"{os.path.basename(weights)}-coco-{'fp16' if self.half else 'fp32'}"
+                # Real forward pass at load time: if inference cannot actually
+                # run, fall back now instead of advertising YOLO and failing later.
+                probe = np.zeros((settings.yolo_imgsz, settings.yolo_imgsz, 3), dtype=np.uint8)
+                self.model.predict(
+                    [probe],
+                    imgsz=settings.yolo_imgsz,
+                    conf=0.5,
+                    classes=[YOLO_PERSON],
+                    device=self.device,
+                    half=self.half,
+                    verbose=False,
+                )
             except Exception as error:  # noqa: BLE001
                 self.backend_error = f"{type(error).__name__}: {error}"
                 log.exception(
@@ -109,6 +126,7 @@ class PersonDetector:
                     settings.yolo_weights,
                 )
                 self.model = None
+                self.backend = "torchvision"
 
         if self.model is None:
             from torchvision.models.detection import (  # noqa: PLC0415
