@@ -3,10 +3,10 @@
 import os
 from dataclasses import dataclass
 
-SERVICE_VERSION = "cv-service-0.2.0"
+SERVICE_VERSION = "cv-service-0.3.0"
 PERSON_DETECTOR_VERSION = "yolov8n-coco-fp16-0.2"
-TRACKER_VERSION = "iou-kalmanlite-tracker-0.3"
-REID_VERSION = "colorhist-torso-embed-eventdriven-0.3"
+TRACKER_VERSION = "iou-proximity-stitch-tracker-0.4"
+REID_VERSION = "colorhist-torso-embed-targetlock-0.4"
 
 
 def _f(key: str, default: float) -> float:
@@ -48,6 +48,27 @@ class Settings:
     detect_every: int = _i("CV_DETECT_EVERY", 2)
     # Full re-identification cadence in seconds of video (event-driven otherwise).
     reid_interval_seconds: float = _f("CV_REID_INTERVAL_SECONDS", 5.0)
+    # --- Phase 3D: association / continuity tuning -------------------------
+    track_iou_threshold: float = _f("CV_TRACK_IOU", 0.15)
+    track_max_age_seconds: float = _f("CV_TRACK_MAX_AGE_SECONDS", 3.0)
+    track_max_speed_px: float = _f("CV_TRACK_MAX_SPEED_PX", 420.0)
+    track_appearance_threshold: float = _f("CV_TRACK_APPEARANCE", 0.45)
+    track_proximity_threshold: float = _f("CV_TRACK_PROXIMITY", 0.30)
+    track_min_points: int = _i("CV_TRACK_MIN_POINTS", 3)
+    track_min_seconds: float = _f("CV_TRACK_MIN_SECONDS", 0.75)
+    # Tracklet stitching (post-pass).
+    stitch_enabled: bool = os.environ.get("CV_STITCH", "true") != "false"
+    stitch_max_gap_seconds: float = _f("CV_STITCH_MAX_GAP_SECONDS", 6.0)
+    stitch_appearance_threshold: float = _f("CV_STITCH_APPEARANCE", 0.55)
+    # Duplicate detection suppression before tracking.
+    nms_iou_threshold: float = _f("CV_NMS_IOU", 0.65)
+    min_person_height_fraction: float = _f("CV_MIN_PERSON_HEIGHT", 0.05)
+    # Target lock behaviour.
+    target_lock_threshold: float = _f("CV_TARGET_LOCK_THRESHOLD", 0.45)
+    target_switch_margin: float = _f("CV_TARGET_SWITCH_MARGIN", 0.18)
+    target_switch_frames: int = _i("CV_TARGET_SWITCH_FRAMES", 3)
+    confirmation_min_seconds: float = _f("CV_CONFIRMATION_MIN_SECONDS", 6.0)
+    confirmation_max_requests: int = _i("CV_CONFIRMATION_MAX", 8)
     # Playing-area filtering.
     court_filter: bool = os.environ.get("CV_COURT_FILTER", "true") != "false"
     court_top_exclude: float = _f("CV_COURT_TOP_EXCLUDE", 0.18)

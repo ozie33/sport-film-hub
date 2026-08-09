@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from app.config import settings
 from app.pipeline.reid import ReferenceGallery, similarity, uniform_affinity
 from app.pipeline.tracker import Track, iou
 
@@ -30,9 +31,25 @@ class IdentityState:
     needs_confirmation: list[dict] = field(default_factory=list)
     low_confidence_intervals: int = 0
     _low_open: bool = False
+    _low_since: float | None = None
+    _challenger_id: str | None = None
+    _challenger_streak: int = 0
+    locked: bool = False
+    lock_time: float = 0.0
     cached_scores: dict[str, float] = field(default_factory=dict)
     reid_evaluations: int = 0
     reid_reasons: dict[str, int] = field(default_factory=dict)
+
+    def remap(self, alias_to_canonical: dict[str, str]) -> None:
+        """After tracklet stitching, fold scores onto the surviving track ids."""
+        merged: dict[str, list[float]] = {}
+        for track_id, scores in self.per_track_scores.items():
+            merged.setdefault(alias_to_canonical.get(track_id, track_id), []).extend(scores)
+        self.per_track_scores = merged
+        if self.target_track_id:
+            self.target_track_id = alias_to_canonical.get(
+                self.target_track_id, self.target_track_id
+            )
 
     def note_reid(self, reason: str) -> None:
         self.reid_evaluations += 1
@@ -91,19 +108,19 @@ def score_track(
     # colours and jersey evidence are confidence boosters only.
     weights = (
         {
-            "reference": 0.50,
-            "continuity": 0.22,
-            "same_track": 0.12,
-            "colour": 0.10,
-            "jersey": 0.06,
+            "reference": 0.44,
+            "continuity": 0.24,
+            "same_track": 0.18,
+            "colour": 0.09,
+            "jersey": 0.05,
         }
         if gallery.has_confirmed
         else {
-            "reference": 0.25,
-            "continuity": 0.22,
-            "same_track": 0.14,
-            "colour": 0.14,
-            "jersey": 0.08,
+            "reference": 0.24,
+            "continuity": 0.24,
+            "same_track": 0.20,
+            "colour": 0.13,
+            "jersey": 0.07,
         }
     )
     score = (
@@ -135,6 +152,31 @@ def choose_target(
     if not observations:
         return None
 
+    target_id = state.target_track_id
+    locked_target = next(
+        (item for item in observations if item[0].track_id == target_id), None
+    )
+
+    # Target lock: while the selected athlete is still tracked and plausible, do
+    # not rescore every player on the floor.
+    if state.locked and locked_target is not None:
+        track, box, signature = locked_target
+        if signature is not None and getattr(signature, "size", 0):
+            score = score_track(
+                frame, track, box, signature, gallery, state, uniform_primary, uniform_secondary, 0.5
+            )
+            state.cached_scores[track.track_id] = score
+        else:
+            score = state.cached_scores.get(track.track_id, 0.0)
+        if score >= settings.target_lock_threshold:
+            state.record(track.track_id, score)
+            state._low_open = False
+            state._low_since = None
+            state._challenger_streak = 0
+            if signature is not None and getattr(signature, "size", 0):
+                state.target_signature = track.mean_signature
+            return track, score
+
     scored: list[tuple[Track, float, tuple[float, float, float, float]]] = []
     for track, box, signature in observations:
         # Full re-identification is expensive; it runs only for the tracks the
@@ -154,11 +196,17 @@ def choose_target(
     best_track, best_score, _ = scored[0]
 
     if best_score < confirmation_threshold:
-        # Do not switch players on weak evidence: ask the user instead.
-        if not state._low_open:
+        # Do not switch players on weak evidence. Only ask the user when the
+        # ambiguity persists — brief dips are normal in wide-angle film.
+        if state._low_since is None:
+            state._low_since = timestamp
+        sustained = timestamp - state._low_since >= settings.confirmation_min_seconds
+        if sustained and not state._low_open:
             state.low_confidence_intervals += 1
             state._low_open = True
-            state.needs_confirmation.append(
+            state.locked = False
+            if len(state.needs_confirmation) < settings.confirmation_max_requests:
+                state.needs_confirmation.append(
                 {
                     "timestamp": round(timestamp, 2),
                     "reason": "identity_confidence_low",
@@ -176,7 +224,7 @@ def choose_target(
                         for track, score, box in scored[:4]
                     ],
                 }
-            )
+                )
         current = next(
             (item for item in scored if item[0].track_id == state.target_track_id), None
         )
@@ -185,17 +233,33 @@ def choose_target(
         return None
 
     state._low_open = False
+    state._low_since = None
     if state.target_track_id and best_track.track_id != state.target_track_id:
-        # Only accept a switch when it is clearly better than staying put.
+        # Only accept a switch when a single challenger is clearly and
+        # repeatedly better than staying put.
         current = next(
             (item for item in scored if item[0].track_id == state.target_track_id), None
         )
-        if current is not None and best_score - current[1] < 0.12:
+        margin = best_score - (current[1] if current is not None else 0.0)
+        if current is not None and margin < settings.target_switch_margin:
+            state._challenger_streak = 0
+            return current[0], current[1]
+        if state._challenger_id == best_track.track_id:
+            state._challenger_streak += 1
+        else:
+            state._challenger_id = best_track.track_id
+            state._challenger_streak = 1
+        if current is not None and state._challenger_streak < settings.target_switch_frames:
             return current[0], current[1]
         state.switches += 1
+        state._challenger_streak = 0
 
     state.target_track_id = best_track.track_id
     state.target_signature = best_track.mean_signature
+    if best_score >= max(settings.target_lock_threshold, confirmation_threshold):
+        if not state.locked:
+            state.lock_time = timestamp
+        state.locked = True
     return best_track, best_score
 
 

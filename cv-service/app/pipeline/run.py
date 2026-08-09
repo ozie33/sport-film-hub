@@ -33,7 +33,7 @@ from app.pipeline import decode as decode_io
 from app.pipeline import video as video_io
 from app.pipeline.candidates import TargetSample, build_candidates
 from app.pipeline.court import DeadTimeDetector, filter_playing_area
-from app.pipeline.detector import Detection, PersonDetector
+from app.pipeline.detector import Detection, PersonDetector, suppress_duplicates
 from app.pipeline.identify import (
     IdentityState,
     choose_target,
@@ -48,7 +48,7 @@ from app.pipeline.reid import (
     signature,
 )
 from app.pipeline.timing import StageTimer, gpu_stats
-from app.pipeline.tracker import MultiObjectTracker
+from app.pipeline.tracker import MultiObjectTracker, stitch_tracks
 
 log = get_logger("cv.pipeline")
 
@@ -170,17 +170,27 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
         confirmed_torso: list[np.ndarray] = []
         confirmed_legs: list[np.ndarray] = []
 
-        tracker = MultiObjectTracker()
+        tracker = MultiObjectTracker(
+            iou_threshold=settings.track_iou_threshold,
+            max_age_seconds=settings.track_max_age_seconds,
+            max_speed_px_per_second=settings.track_max_speed_px,
+            appearance_threshold=settings.track_appearance_threshold,
+            proximity_threshold=settings.track_proximity_threshold,
+        )
         state = IdentityState()
         dead_time = DeadTimeDetector(
             motion_threshold=settings.dead_time_motion,
             scene_threshold=settings.dead_time_scene,
         )
         target_samples: list[TargetSample] = []
+        ball_centres: dict[float, list[tuple[float, float]]] = {}
+        identity_by_time: dict[float, float] = {}
+        frame_width_hint = info.width or 1280
         debug_frames: list[dict] = []
 
         detections_total = 0
         detections_dropped = 0
+        detections_deduplicated = 0
         frames_decoded = 0
         frames_detected = 0
         frames_propagated = 0
@@ -217,10 +227,18 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
         def handle_detect_frame(timestamp: float, frame: np.ndarray, detections: list[Detection]):
             nonlocal detections_total, detections_dropped, ball_frames, target_frames
             nonlocal confirmation_matches, signature_computations, previous_person_count
-            nonlocal last_reid_time, uniform_primary, uniform_secondary
+            nonlocal last_reid_time, uniform_primary, uniform_secondary, detections_deduplicated
 
             people = [d for d in detections if d.label == "person"]
             balls = [d for d in detections if d.label == "ball"]
+            # Duplicate/overlapping person boxes fragment tracks: suppress first.
+            people, duplicates = suppress_duplicates(
+                people,
+                settings.nms_iou_threshold,
+                settings.min_person_height_fraction,
+                frame.shape[0],
+            )
+            detections_deduplicated += duplicates
             if settings.court_filter:
                 people, dropped = filter_playing_area(
                     people,
@@ -234,6 +252,9 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
             detections_total += len(people)
             if balls:
                 ball_frames += 1
+                ball_centres[round(timestamp, 3)] = [
+                    ((b.box[0] + b.box[2]) / 2, (b.box[1] + b.box[3]) / 2) for b in balls
+                ]
             if people:
                 dead_time.learn_court(frame)
 
@@ -249,10 +270,12 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                 pending_confirmations
                 and pending_confirmations[0].timestamp <= timestamp + (1.0 / analysis_fps)
             )
-            want_signatures = (
-                cadence_due or count_changed or target_missing or low_confidence or confirmation_due
-            )
+            # Appearance signatures are also the association signal, so they are
+            # always computed on detection frames — cheap relative to the
+            # fragmentation they prevent.
+            want_signatures = True
             previous_person_count = len(people)
+            _ = count_changed
 
             # One signature per detection, computed at most once and reused.
             with timer.stage("signature"):
@@ -324,6 +347,8 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                         gallery.add(sig, "high")
                         state.target_track_id = track.track_id
                         state.target_signature = sig
+                        state.locked = True
+                        state.lock_time = timestamp
                         confirmation_matches += 1
                         torso_mean, legs_mean = region_means(frame, target_box)
                         if torso_mean is not None:
@@ -374,6 +399,7 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                     ball_distance=ball_distance,
                 )
             )
+            identity_by_time[round(timestamp, 3)] = score
             if len(debug_frames) < settings.debug_frames and frames_detected % 40 == 0:
                 image = _encode_debug_frame(frame, box, f"{track.track_id} {score:.2f}")
                 if image:
@@ -567,8 +593,85 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
         )
         progress("generating_candidates", "Finding player involvement", 90)
 
+        # ------------------------------------------------- tracklet stitching
+        tracks_raw = len(tracker.tracks)
+        surviving = tracker.tracks
+        stitch_merges = 0
+        if settings.stitch_enabled:
+            with timer.stage("stitch"):
+                surviving, stitch_merges = stitch_tracks(
+                    tracker.tracks,
+                    settings.stitch_max_gap_seconds,
+                    settings.track_max_speed_px,
+                    settings.stitch_appearance_threshold,
+                )
+            alias: dict[str, str] = {}
+            for track in surviving:
+                for merged in track.merged_from:
+                    alias[merged] = track.track_id
+            state.remap(alias)
+
+        # Fragments that never became a real tracklet are noise, not identities.
+        tracks_kept = [
+            track
+            for track in surviving
+            if len(track.points) >= settings.track_min_points
+            and track.duration >= settings.track_min_seconds
+        ]
+        if state.target_track_id and all(
+            track.track_id != state.target_track_id for track in tracks_kept
+        ):
+            target_track = next(
+                (t for t in surviving if t.track_id == state.target_track_id), None
+            )
+            if target_track is not None:
+                tracks_kept.append(target_track)
+
+        log.info(
+            "tracklet stitching job=%s raw=%d after_stitch=%d merges=%d kept=%d "
+            "impossible_jumps_rejected=%d target=%s",
+            request.jobId,
+            tracks_raw,
+            len(surviving),
+            stitch_merges,
+            len(tracks_kept),
+            tracker.rejected_impossible_jumps,
+            state.target_track_id,
+        )
+
+        # Target samples are rebuilt from the stitched target track so continuity
+        # gained by merging is reflected in coverage and candidate windows.
+        target_track = next(
+            (t for t in tracks_kept if t.track_id == state.target_track_id), None
+        )
+        if target_track is not None:
+            track_identity = state.identity_confidence(target_track.track_id)
+            rebuilt: list[TargetSample] = []
+            for point in target_track.points:
+                key = round(point.timestamp, 3)
+                centres = ball_centres.get(key)
+                distance = None
+                if centres:
+                    cx = (point.box[0] + point.box[2]) / 2
+                    cy = (point.box[1] + point.box[3]) / 2
+                    distance = min(
+                        float(np.hypot((bx - cx) / max(1, frame_width_hint), (by - cy) / max(1, frame_width_hint)))
+                        for bx, by in centres
+                    )
+                rebuilt.append(
+                    TargetSample(
+                        timestamp=point.timestamp,
+                        box=point.box,
+                        identity_confidence=identity_by_time.get(key, track_identity),
+                        ball_distance=distance,
+                    )
+                )
+            if len(rebuilt) > len(target_samples):
+                target_samples = rebuilt
+            target_frames = max(target_frames, len(target_track.points))
+
         tracks_payload = []
-        for track in tracker.tracks:
+        for track in tracks_kept:
             if len(track.points) < 2:
                 continue
             identity_confidence = state.identity_confidence(track.track_id)
@@ -587,11 +690,13 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                     "metadata": {
                         "detection_confidence": round(track.detection_confidence, 3),
                         "samples": len(track.points),
+                        "merged_tracklets": len(track.merged_from),
                         "boxes": track.box_history(),
                         "signals": [
                             "person_detection",
-                            "iou_motion_association",
+                            "iou_proximity_association",
                             "appearance_similarity",
+                            "tracklet_stitching",
                             "uniform_colors",
                         ],
                     },
@@ -646,6 +751,8 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                     "jerseyNumberSupplied": bool(request.identityContext.jerseyNumber),
                 },
                 "detectorBackend": active_detector.backend,
+                "detectorBackendRequested": active_detector.requested_backend,
+                "detectorBackendError": active_detector.backend_error,
                 "detectorPrecision": "fp16" if active_detector.half else "fp32",
                 "device": active_detector.device.type,
                 "batchSize": batch_size,
@@ -661,6 +768,7 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                 "deadTimeStaticFrames": dead_time.skipped_static,
                 "deadTimeOffCourtFrames": dead_time.skipped_scene,
                 "detectionsDroppedOffCourt": detections_dropped,
+                "detectionsDeduplicated": detections_deduplicated,
                 "signatureComputations": signature_computations,
                 "reidEvaluations": state.reid_evaluations,
                 "reidTriggers": state.reid_reasons,
@@ -679,7 +787,26 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                 "detections": detections_total,
                 "detectionsPerFrame": round(detections_total / max(1, frames_detected), 2),
                 "tracks": len(tracks_payload),
-                "tracksCreated": len(tracker.tracks),
+                "tracksCreated": tracks_raw,
+                "tracksAfterStitching": len(surviving),
+                "tracksKept": len(tracks_kept),
+                "trackletMerges": stitch_merges,
+                "impossibleJumpPairsRejected": tracker.rejected_impossible_jumps,
+                "trackingParameters": {
+                    "iouThreshold": settings.track_iou_threshold,
+                    "maxAgeSeconds": settings.track_max_age_seconds,
+                    "maxSpeedPixelsPerSecond": settings.track_max_speed_px,
+                    "proximityThreshold": settings.track_proximity_threshold,
+                    "appearanceThreshold": settings.track_appearance_threshold,
+                    "minTrackPoints": settings.track_min_points,
+                    "minTrackSeconds": settings.track_min_seconds,
+                    "stitchMaxGapSeconds": settings.stitch_max_gap_seconds,
+                    "stitchAppearanceThreshold": settings.stitch_appearance_threshold,
+                    "targetLockThreshold": settings.target_lock_threshold,
+                    "targetSwitchMargin": settings.target_switch_margin,
+                    "nmsIouThreshold": settings.nms_iou_threshold,
+                    "minPersonHeightFraction": settings.min_person_height_fraction,
+                },
                 "framesWithTarget": target_frames,
                 "targetTrackingCoverage": coverage,
                 "targetVisibleSeconds": round(analyzed_span, 2),

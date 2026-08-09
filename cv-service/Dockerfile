@@ -61,11 +61,25 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
 
 # Warm the detector weights into the image so cold starts don't download them.
-RUN mkdir -p /models /models/ultralytics "$CV_WORK_DIR" \
-    && python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')" \
-    && (test -f yolov8n.pt && mv yolov8n.pt /models/yolov8n.pt || true) \
+# The download must land exactly at CV_YOLO_WEIGHTS and the build FAILS if YOLO
+# cannot be loaded — a silent miss here is what caused the runtime fallback to
+# Faster R-CNN while /ready still advertised YOLO.
+RUN mkdir -p /models /models/ultralytics /models/hf /models/cache "$CV_WORK_DIR" \
+    && python -c "\
+from ultralytics import YOLO;\
+m = YOLO('yolov8n.pt');\
+import shutil, os;\
+src = str(m.ckpt_path if hasattr(m, 'ckpt_path') and m.ckpt_path else 'yolov8n.pt');\
+dst = os.environ['CV_YOLO_WEIGHTS'];\
+shutil.copy(src, dst) if os.path.abspath(src) != os.path.abspath(dst) else None;\
+print('yolo weights baked at', dst)" \
+    && test -s "$CV_YOLO_WEIGHTS" \
+    && python -c "\
+from app.pipeline.detector import PersonDetector;\
+d = PersonDetector('yolo');\
+assert d.backend == 'yolo', 'YOLO backend failed to load: ' + str(d.backend_error)" \
     && python -c "from app.pipeline.detector import PersonDetector; PersonDetector('torchvision')" \
-    && chmod -R a+rX /models
+    && chmod -R a+rwX /models
 
 # Run unprivileged; the app only needs to write to CV_WORK_DIR.
 RUN useradd --create-home --uid 10001 cvsvc \

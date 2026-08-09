@@ -11,12 +11,14 @@ is here", never "this is the selected athlete".
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 
 import numpy as np
 import torch
 
 from app.config import settings
 from app.logging_setup import get_logger
+from app.pipeline.tracker import iou as box_iou
 
 log = get_logger("cv.detector")
 
@@ -34,6 +36,39 @@ class Detection:
     label: str  # "person" | "ball"
 
 
+def suppress_duplicates(
+    detections: list[Detection],
+    iou_threshold: float,
+    min_height_fraction: float,
+    frame_height: int,
+) -> tuple[list[Detection], int]:
+    """Remove overlapping duplicate person boxes and tiny non-player boxes.
+
+    Duplicate detections were a direct cause of track fragmentation: two boxes
+    on one athlete alternate ownership of the track and split it in half.
+    """
+    kept: list[Detection] = []
+    dropped = 0
+    for detection in sorted(detections, key=lambda d: d.confidence, reverse=True):
+        if detection.label == "person":
+            height = (detection.box[3] - detection.box[1]) / max(1.0, float(frame_height))
+            if height < min_height_fraction:
+                dropped += 1
+                continue
+        duplicate = False
+        for existing in kept:
+            if existing.label != detection.label:
+                continue
+            if box_iou(existing.box, detection.box) >= iou_threshold:
+                duplicate = True
+                break
+        if duplicate:
+            dropped += 1
+            continue
+        kept.append(detection)
+    return kept, dropped
+
+
 class PersonDetector:
     """Lazy-loaded detector; batched fp16 CUDA inference when available."""
 
@@ -44,21 +79,35 @@ class PersonDetector:
         self.backend = "torchvision"
         self.model = None
         self.version = "fasterrcnn_mobilenet_v3_large_fpn-coco-0.1"
+        self.requested_backend = requested
+        self.backend_error: str | None = None
 
         if requested in {"yolo", "auto"}:
             try:
                 from ultralytics import YOLO  # noqa: PLC0415
 
-                self.model = YOLO(settings.yolo_weights)
+                weights = settings.yolo_weights
+                if not os.path.exists(weights):
+                    # Baked path may be missing on some hosts; fall back to the
+                    # plain weight name so ultralytics resolves/downloads it.
+                    fallback = os.path.basename(weights) or "yolov8n.pt"
+                    log.warning(
+                        "yolo weights not found at %s, trying %s", weights, fallback
+                    )
+                    weights = fallback
+                self.model = YOLO(weights)
                 self.model.to(self.device)
                 if self.half:
                     self.model.model.half()
                 self.model.fuse()
                 self.backend = "yolo"
-                self.version = f"{settings.yolo_weights}-coco-{'fp16' if self.half else 'fp32'}"
+                self.version = f"{os.path.basename(weights)}-coco-{'fp16' if self.half else 'fp32'}"
             except Exception as error:  # noqa: BLE001
-                if requested == "yolo":
-                    log.error("yolo backend unavailable, falling back err=%s", error)
+                self.backend_error = f"{type(error).__name__}: {error}"
+                log.exception(
+                    "yolo backend unavailable, falling back to torchvision weights=%s",
+                    settings.yolo_weights,
+                )
                 self.model = None
 
         if self.model is None:
@@ -77,11 +126,13 @@ class PersonDetector:
         if self.device.type == "cuda":
             torch.backends.cudnn.benchmark = True
         log.info(
-            "detector ready backend=%s device=%s fp16=%s version=%s",
+            "detector ready backend=%s requested=%s device=%s fp16=%s version=%s error=%s",
             self.backend,
+            self.requested_backend,
             self.device.type,
             self.half,
             self.version,
+            self.backend_error or "none",
         )
 
     # ------------------------------------------------------------------ public
