@@ -6,7 +6,10 @@ import time
 from collections import defaultdict
 from contextlib import contextmanager
 
-import torch
+try:  # torch is present in the service image; keep timing usable without it.
+    import torch
+except ModuleNotFoundError:  # pragma: no cover
+    torch = None  # type: ignore[assignment]
 
 
 class StageTimer:
@@ -50,7 +53,7 @@ class StageTimer:
 
 def gpu_stats() -> dict[str, float | str | None]:
     """Best-effort GPU telemetry; returns device only when NVML is unavailable."""
-    if not torch.cuda.is_available():
+    if torch is None or not torch.cuda.is_available():
         return {"device": "cpu"}
     stats: dict[str, float | str | None] = {"device": "cuda"}
     try:
