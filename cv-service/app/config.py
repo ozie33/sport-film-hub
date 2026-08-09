@@ -3,7 +3,7 @@
 import os
 from dataclasses import dataclass
 
-SERVICE_VERSION = "cv-service-0.3.0"
+SERVICE_VERSION = "cv-service-0.3.1"
 PERSON_DETECTOR_VERSION = "yolov8n-coco-fp16-0.2"
 TRACKER_VERSION = "iou-proximity-stitch-tracker-0.4"
 REID_VERSION = "colorhist-torso-embed-targetlock-0.4"
