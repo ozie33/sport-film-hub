@@ -140,7 +140,8 @@ class MultiObjectTracker:
         track = Track(track_id=f"t{self._next}")
         self._next += 1
         track.points.append(TrackPoint(timestamp, box, confidence))
-        track.signatures.append(sig)
+        if sig is not None and getattr(sig, "size", 0):
+            track.signatures.append(sig)
         track.association_scores.append(0.5)
         track.last_timestamp = timestamp
         self.tracks.append(track)
