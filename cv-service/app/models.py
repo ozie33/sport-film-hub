@@ -43,8 +43,8 @@ class VideoSource(BaseModel):
 class JobSettings(BaseModel):
     preRoll: float = 3.0
     postRoll: float = 4.0
-    analysisFps: float = 5.0
-    detectionResolution: int = 960
+    analysisFps: float = 2.0
+    detectionResolution: int = 640
     detectionConfidence: float = 0.35
     identityHighThreshold: float = 0.80
     identityMediumThreshold: float = 0.55

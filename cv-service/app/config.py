@@ -3,10 +3,10 @@
 import os
 from dataclasses import dataclass
 
-SERVICE_VERSION = "cv-service-0.1.0"
-PERSON_DETECTOR_VERSION = "fasterrcnn_mobilenet_v3_large_fpn-coco-0.1"
-TRACKER_VERSION = "iou-appearance-tracker-0.2"
-REID_VERSION = "colorhist-torso-embed-0.2"
+SERVICE_VERSION = "cv-service-0.2.0"
+PERSON_DETECTOR_VERSION = "yolov8n-coco-fp16-0.2"
+TRACKER_VERSION = "iou-kalmanlite-tracker-0.3"
+REID_VERSION = "colorhist-torso-embed-eventdriven-0.3"
 
 
 def _f(key: str, default: float) -> float:
@@ -29,8 +29,8 @@ class Settings:
     work_dir: str = os.environ.get("CV_WORK_DIR", "/tmp/cv-jobs")
     max_workers: int = _i("CV_MAX_WORKERS", 1)
     # Analysis defaults; a job payload may override these.
-    analysis_fps: float = _f("ANALYSIS_FPS", 5.0)
-    detection_resolution: int = _i("ANALYSIS_DETECTION_RESOLUTION", 960)
+    analysis_fps: float = _f("ANALYSIS_FPS", 2.0)
+    detection_resolution: int = _i("ANALYSIS_DETECTION_RESOLUTION", 640)
     detection_confidence: float = _f("ANALYSIS_DETECTION_CONFIDENCE", 0.35)
     identity_high: float = _f("ANALYSIS_IDENTITY_HIGH", 0.80)
     identity_medium: float = _f("ANALYSIS_IDENTITY_MEDIUM", 0.55)
@@ -38,8 +38,29 @@ class Settings:
     pre_roll: float = _f("ANALYSIS_PRE_ROLL", 3.0)
     post_roll: float = _f("ANALYSIS_POST_ROLL", 4.0)
     ball_detection: bool = os.environ.get("ANALYSIS_BALL_DETECTION", "true") != "false"
-    # Hard cap so a full game cannot run unbounded.
-    max_frames: int = _i("CV_MAX_FRAMES", 9000)
+    # Detector backend / performance.
+    detector_backend: str = os.environ.get("CV_DETECTOR", "yolo")
+    yolo_weights: str = os.environ.get("CV_YOLO_WEIGHTS", "yolov8n.pt")
+    yolo_imgsz: int = _i("CV_YOLO_IMGSZ", 640)
+    use_fp16: bool = os.environ.get("CV_FP16", "true") != "false"
+    batch_size: int = _i("CV_BATCH_SIZE", 32)
+    # Detect every Nth sampled frame; motion-track in between.
+    detect_every: int = _i("CV_DETECT_EVERY", 2)
+    # Full re-identification cadence in seconds of video (event-driven otherwise).
+    reid_interval_seconds: float = _f("CV_REID_INTERVAL_SECONDS", 5.0)
+    # Playing-area filtering.
+    court_filter: bool = os.environ.get("CV_COURT_FILTER", "true") != "false"
+    court_top_exclude: float = _f("CV_COURT_TOP_EXCLUDE", 0.18)
+    court_min_height: float = _f("CV_COURT_MIN_HEIGHT", 0.035)
+    court_max_height: float = _f("CV_COURT_MAX_HEIGHT", 0.85)
+    # Dead-time skipping (timeouts, halftime stills, replays, off-court shots).
+    dead_time_skip: bool = os.environ.get("CV_DEAD_TIME_SKIP", "true") != "false"
+    dead_time_motion: float = _f("CV_DEAD_TIME_MOTION", 1.2)
+    dead_time_scene: float = _f("CV_DEAD_TIME_SCENE", 0.28)
+    # Safety limit: wall-clock budget for one job. Film is never silently
+    # truncated by a frame cap; 0 disables the frame cap entirely.
+    job_budget_seconds: float = _f("CV_JOB_BUDGET_SECONDS", 1500.0)
+    max_frames: int = _i("CV_MAX_FRAMES", 0)
     debug_frames: int = _i("CV_DEBUG_FRAMES", 6)
 
 
@@ -90,6 +111,17 @@ def validate_settings(s: Settings = settings) -> list[str]:
         errors.append("ANALYSIS_DETECTION_CONFIDENCE must be between 0 and 1.")
     if not 0 < s.confirmation_threshold < 1:
         errors.append("ANALYSIS_CONFIRMATION_THRESHOLD must be between 0 and 1.")
+    if s.batch_size < 1:
+        errors.append("CV_BATCH_SIZE must be at least 1.")
+    if s.detect_every < 1:
+        errors.append("CV_DETECT_EVERY must be at least 1.")
+    if s.job_budget_seconds < 60:
+        errors.append("CV_JOB_BUDGET_SECONDS must be at least 60.")
+    if s.max_frames:
+        warnings.append(
+            f"CV_MAX_FRAMES is set to {s.max_frames}; long film will be truncated. "
+            "Leave it at 0 and rely on CV_JOB_BUDGET_SECONDS for full coverage."
+        )
     if s.max_workers < 1:
         errors.append("CV_MAX_WORKERS must be at least 1.")
 
