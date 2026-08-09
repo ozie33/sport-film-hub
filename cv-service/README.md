@@ -261,3 +261,23 @@ CPU inference still works, just slower (see throughput limits above).
    `/ready` reports the expected versions.
 
 Rollback = redeploy with the previous `sha-<commit>` tag.
+
+## Performance profile (0.2.0)
+
+| Setting | Env var | Default |
+|---|---|---|
+| Detector | `CV_DETECTOR` / `CV_YOLO_WEIGHTS` | `yolo` / baked `yolov8n.pt` (fp16 on CUDA) |
+| Sampling FPS | `ANALYSIS_FPS` | `2` |
+| Detection width | `ANALYSIS_DETECTION_RESOLUTION` | `640` |
+| Batch size | `CV_BATCH_SIZE` | `32` |
+| Detection cadence | `CV_DETECT_EVERY` | every 2nd sampled frame (~1 Hz), motion-tracked between |
+| Re-ID cadence | `CV_REID_INTERVAL_SECONDS` | `5` s plus event triggers (new track, reappearance, low confidence, ambiguity, confirmation) |
+| Court filter | `CV_COURT_FILTER`, `CV_COURT_TOP_EXCLUDE`, `CV_COURT_MIN_HEIGHT`, `CV_COURT_MAX_HEIGHT` | on |
+| Dead-time skip | `CV_DEAD_TIME_SKIP`, `CV_DEAD_TIME_MOTION`, `CV_DEAD_TIME_SCENE` | on |
+| Coverage | `CV_MAX_FRAMES` | `0` (no frame cap — full film) |
+| Safety limit | `CV_JOB_BUDGET_SECONDS` | `1500` (wall clock; truncation is reported, never silent) |
+
+Decoding is done by ffmpeg (`fps=<analysisFps>,scale=<width>:-2`), so the source is never
+walked frame by frame. Clip timestamps are always original-video timestamps.
+Logs report per-stage seconds, per-call milliseconds, GPU utilisation, frames
+decoded vs detected vs motion-tracked vs dead-time skipped, and analysed coverage.
