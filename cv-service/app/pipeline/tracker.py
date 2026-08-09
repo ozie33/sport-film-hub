@@ -32,6 +32,7 @@ class TrackPoint:
     timestamp: float
     box: tuple[float, float, float, float]
     detection_confidence: float
+    interpolated: bool = False
 
 
 @dataclass
@@ -42,6 +43,29 @@ class Track:
     association_scores: list[float] = field(default_factory=list)
     last_timestamp: float = 0.0
     missed: int = 0
+
+    @property
+    def velocity(self) -> tuple[float, float]:
+        """Constant-velocity estimate in pixels/second from recent points."""
+        if len(self.points) < 2:
+            return 0.0, 0.0
+        first, last = self.points[-3] if len(self.points) >= 3 else self.points[-2], self.points[-1]
+        dt = last.timestamp - first.timestamp
+        if dt <= 1e-6:
+            return 0.0, 0.0
+        fx = (last.box[0] + last.box[2]) / 2 - (first.box[0] + first.box[2]) / 2
+        fy = (last.box[1] + last.box[3]) / 2 - (first.box[1] + first.box[3]) / 2
+        return fx / dt, fy / dt
+
+    def predict(self, timestamp: float) -> tuple[float, float, float, float] | None:
+        """Where the box should be at `timestamp` with no new detection."""
+        if not self.points:
+            return None
+        last = self.points[-1]
+        dt = timestamp - last.timestamp
+        vx, vy = self.velocity
+        dx, dy = vx * dt, vy * dt
+        return (last.box[0] + dx, last.box[1] + dy, last.box[2] + dx, last.box[3] + dy)
 
     @property
     def start_time(self) -> float:
@@ -94,6 +118,7 @@ class Track:
                 "x2": round(point.box[2], 1),
                 "y2": round(point.box[3], 1),
                 "c": round(point.detection_confidence, 3),
+                "i": 1 if point.interpolated else 0,
             }
             for point in self.points[::step]
         ]
@@ -108,12 +133,15 @@ class MultiObjectTracker:
         self.max_missed = max_missed
         self.iou_threshold = iou_threshold
         self._next = 1
+        self.last_new_track_ids: set[str] = set()
+        self.reappeared_track_ids: set[str] = set()
 
     def _new_track(self, timestamp: float, box, confidence: float, sig: np.ndarray) -> Track:
         track = Track(track_id=f"t{self._next}")
         self._next += 1
         track.points.append(TrackPoint(timestamp, box, confidence))
-        track.signatures.append(sig)
+        if sig is not None and getattr(sig, "size", 0):
+            track.signatures.append(sig)
         track.association_scores.append(0.5)
         track.last_timestamp = timestamp
         self.tracks.append(track)
@@ -127,6 +155,8 @@ class MultiObjectTracker:
     ) -> list[tuple[Track, tuple[float, float, float, float]]]:
         assigned: set[str] = set()
         result: list[tuple[Track, tuple[float, float, float, float]]] = []
+        new_track_ids: set[str] = set()
+        reappeared: set[str] = set()
 
         for box, confidence, sig in detections:
             best_track: Track | None = None
@@ -134,8 +164,11 @@ class MultiObjectTracker:
             for track in self.active:
                 if track.track_id in assigned or not track.points:
                     continue
-                geometric = iou(track.points[-1].box, box)
-                appearance = similarity(track.mean_signature, sig)
+                reference = track.predict(timestamp) or track.points[-1].box
+                geometric = max(iou(track.points[-1].box, box), iou(reference, box))
+                appearance = (
+                    similarity(track.mean_signature, sig) if sig is not None and sig.size else 0.0
+                )
                 score = 0.6 * geometric + 0.4 * appearance
                 # Occluded tracks may re-associate on appearance alone.
                 if geometric < self.iou_threshold and appearance < 0.6:
@@ -147,12 +180,16 @@ class MultiObjectTracker:
                 track = self._new_track(timestamp, box, confidence, sig)
                 result.append((track, box))
                 assigned.add(track.track_id)
+                new_track_ids.add(track.track_id)
                 continue
 
             best_track.points.append(TrackPoint(timestamp, box, confidence))
-            best_track.signatures.append(sig)
+            if sig is not None and sig.size:
+                best_track.signatures.append(sig)
             best_track.association_scores.append(best_score)
             best_track.last_timestamp = timestamp
+            if best_track.missed > 0:
+                reappeared.add(best_track.track_id)
             best_track.missed = 0
             assigned.add(best_track.track_id)
             result.append((best_track, box))
@@ -162,4 +199,28 @@ class MultiObjectTracker:
                 track.missed += 1
                 if track.missed > self.max_missed:
                     self.active.remove(track)
+        self.last_new_track_ids = new_track_ids
+        self.reappeared_track_ids = reappeared
+        return result
+
+    def propagate(
+        self, timestamp: float
+    ) -> list[tuple[Track, tuple[float, float, float, float]]]:
+        """Cheap motion-only step for frames between detection passes.
+
+        No detector and no appearance work: each active track is advanced with
+        its constant-velocity estimate so clip boundaries stay smooth at the
+        original video timestamps.
+        """
+        result: list[tuple[Track, tuple[float, float, float, float]]] = []
+        for track in self.active:
+            predicted = track.predict(timestamp)
+            if predicted is None:
+                continue
+            confidence = track.points[-1].detection_confidence * 0.9
+            track.points.append(
+                TrackPoint(timestamp, predicted, confidence, interpolated=True)
+            )
+            track.last_timestamp = timestamp
+            result.append((track, predicted))
         return result

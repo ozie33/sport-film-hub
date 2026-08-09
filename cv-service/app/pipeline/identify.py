@@ -30,6 +30,13 @@ class IdentityState:
     needs_confirmation: list[dict] = field(default_factory=list)
     low_confidence_intervals: int = 0
     _low_open: bool = False
+    cached_scores: dict[str, float] = field(default_factory=dict)
+    reid_evaluations: int = 0
+    reid_reasons: dict[str, int] = field(default_factory=dict)
+
+    def note_reid(self, reason: str) -> None:
+        self.reid_evaluations += 1
+        self.reid_reasons[reason] = self.reid_reasons.get(reason, 0) + 1
 
     def record(self, track_id: str, score: float) -> None:
         self.per_track_scores.setdefault(track_id, []).append(score)
@@ -118,6 +125,7 @@ def choose_target(
     uniform_secondary,
     timestamp: float,
     confirmation_threshold: float,
+    reid_track_ids: set[str] | None = None,
 ) -> tuple[Track, float] | None:
     """Pick the track most likely to be the selected athlete.
 
@@ -129,9 +137,16 @@ def choose_target(
 
     scored: list[tuple[Track, float, tuple[float, float, float, float]]] = []
     for track, box, signature in observations:
-        score = score_track(
-            frame, track, box, signature, gallery, state, uniform_primary, uniform_secondary, 0.5
-        )
+        # Full re-identification is expensive; it runs only for the tracks the
+        # caller flagged (new, ambiguous, reappeared, or low-confidence).
+        full = reid_track_ids is None or track.track_id in reid_track_ids
+        if full and signature is not None and signature.size:
+            score = score_track(
+                frame, track, box, signature, gallery, state, uniform_primary, uniform_secondary, 0.5
+            )
+            state.cached_scores[track.track_id] = score
+        else:
+            score = state.cached_scores.get(track.track_id, 0.0)
         state.record(track.track_id, score)
         scored.append((track, score, box))
 

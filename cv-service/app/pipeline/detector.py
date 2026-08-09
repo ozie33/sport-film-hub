@@ -1,8 +1,11 @@
 """Person (and optional ball) detection.
 
-Uses a torchvision COCO detector so the service has no external model-hosting
-dependency. Detection and identity are separate concepts: a strong detection
-says "a person is here", never "this is the selected athlete".
+Primary backend is a modern real-time YOLO detector running batched fp16 on
+GPU. A torchvision Faster R-CNN backend is kept as a fallback so the service
+still works if YOLO weights are unavailable.
+
+Detection and identity are separate concepts: a strong detection says "a person
+is here", never "this is the selected athlete".
 """
 
 from __future__ import annotations
@@ -11,13 +14,16 @@ from dataclasses import dataclass
 
 import numpy as np
 import torch
-from torchvision.models.detection import (
-    FasterRCNN_MobileNet_V3_Large_FPN_Weights,
-    fasterrcnn_mobilenet_v3_large_fpn,
-)
+
+from app.config import settings
+from app.logging_setup import get_logger
+
+log = get_logger("cv.detector")
 
 COCO_PERSON = 1
 COCO_SPORTS_BALL = 37
+YOLO_PERSON = 0
+YOLO_SPORTS_BALL = 32
 
 
 @dataclass
@@ -29,16 +35,72 @@ class Detection:
 
 
 class PersonDetector:
-    """Lazy-loaded detector; runs on CUDA when available, otherwise CPU."""
+    """Lazy-loaded detector; batched fp16 CUDA inference when available."""
 
-    def __init__(self) -> None:
-        weights = FasterRCNN_MobileNet_V3_Large_FPN_Weights.DEFAULT
-        self.model = fasterrcnn_mobilenet_v3_large_fpn(weights=weights)
-        self.model.eval()
+    def __init__(self, backend: str | None = None) -> None:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model.to(self.device)
+        self.half = self.device.type == "cuda" and settings.use_fp16
+        requested = (backend or settings.detector_backend).lower()
+        self.backend = "torchvision"
+        self.model = None
+        self.version = "fasterrcnn_mobilenet_v3_large_fpn-coco-0.1"
+
+        if requested in {"yolo", "auto"}:
+            try:
+                from ultralytics import YOLO  # noqa: PLC0415
+
+                self.model = YOLO(settings.yolo_weights)
+                self.model.to(self.device)
+                if self.half:
+                    self.model.model.half()
+                self.model.fuse()
+                self.backend = "yolo"
+                self.version = f"{settings.yolo_weights}-coco-{'fp16' if self.half else 'fp32'}"
+            except Exception as error:  # noqa: BLE001
+                if requested == "yolo":
+                    log.error("yolo backend unavailable, falling back err=%s", error)
+                self.model = None
+
+        if self.model is None:
+            from torchvision.models.detection import (  # noqa: PLC0415
+                FasterRCNN_MobileNet_V3_Large_FPN_Weights,
+                fasterrcnn_mobilenet_v3_large_fpn,
+            )
+
+            weights = FasterRCNN_MobileNet_V3_Large_FPN_Weights.DEFAULT
+            model = fasterrcnn_mobilenet_v3_large_fpn(weights=weights)
+            model.eval()
+            model.to(self.device)
+            self.model = model
+            self.backend = "torchvision"
+
+        if self.device.type == "cuda":
+            torch.backends.cudnn.benchmark = True
+        log.info(
+            "detector ready backend=%s device=%s fp16=%s version=%s",
+            self.backend,
+            self.device.type,
+            self.half,
+            self.version,
+        )
+
+    # ------------------------------------------------------------------ public
 
     @torch.inference_mode()
+    def detect_batch(
+        self,
+        frames: list[np.ndarray],
+        timestamps: list[float],
+        min_confidence: float,
+        include_ball: bool,
+    ) -> list[list[Detection]]:
+        """One forward pass for the whole batch of frames."""
+        if not frames:
+            return []
+        if self.backend == "yolo":
+            return self._detect_yolo(frames, timestamps, min_confidence, include_ball)
+        return self._detect_torchvision(frames, timestamps, min_confidence, include_ball)
+
     def detect(
         self,
         frame: np.ndarray,
@@ -46,27 +108,77 @@ class PersonDetector:
         min_confidence: float,
         include_ball: bool,
     ) -> list[Detection]:
-        rgb = frame[:, :, ::-1].copy()
-        tensor = torch.from_numpy(rgb).permute(2, 0, 1).float().div(255.0).to(self.device)
-        output = self.model([tensor])[0]
+        return self.detect_batch([frame], [timestamp], min_confidence, include_ball)[0]
 
-        detections: list[Detection] = []
-        for box, score, label in zip(
-            output["boxes"].cpu().numpy(),
-            output["scores"].cpu().numpy(),
-            output["labels"].cpu().numpy(),
-        ):
-            score = float(score)
-            if score < min_confidence:
-                continue
-            if int(label) == COCO_PERSON:
-                kind = "person"
-            elif include_ball and int(label) == COCO_SPORTS_BALL:
-                kind = "ball"
-            else:
-                continue
-            x1, y1, x2, y2 = (float(v) for v in box)
-            detections.append(
-                Detection(timestamp=timestamp, box=(x1, y1, x2, y2), confidence=score, label=kind)
-            )
-        return detections
+    # ----------------------------------------------------------------- private
+
+    def _detect_yolo(self, frames, timestamps, min_confidence, include_ball):
+        classes = [YOLO_PERSON] + ([YOLO_SPORTS_BALL] if include_ball else [])
+        outputs = self.model.predict(
+            frames,
+            imgsz=settings.yolo_imgsz,
+            conf=min_confidence,
+            classes=classes,
+            device=self.device,
+            half=self.half,
+            verbose=False,
+        )
+        batch: list[list[Detection]] = []
+        for timestamp, result in zip(timestamps, outputs):
+            detections: list[Detection] = []
+            boxes = result.boxes
+            if boxes is not None and boxes.shape[0]:
+                xyxy = boxes.xyxy.float().cpu().numpy()
+                conf = boxes.conf.float().cpu().numpy()
+                cls = boxes.cls.int().cpu().numpy()
+                for box, score, label in zip(xyxy, conf, cls):
+                    kind = "person" if int(label) == YOLO_PERSON else "ball"
+                    detections.append(
+                        Detection(
+                            timestamp=timestamp,
+                            box=(float(box[0]), float(box[1]), float(box[2]), float(box[3])),
+                            confidence=float(score),
+                            label=kind,
+                        )
+                    )
+            batch.append(detections)
+        return batch
+
+    def _detect_torchvision(self, frames, timestamps, min_confidence, include_ball):
+        tensors = [
+            torch.from_numpy(frame[:, :, ::-1].copy())
+            .permute(2, 0, 1)
+            .float()
+            .div(255.0)
+            .to(self.device, non_blocking=True)
+            for frame in frames
+        ]
+        if self.half:
+            with torch.autocast("cuda", dtype=torch.float16):
+                outputs = self.model(tensors)
+        else:
+            outputs = self.model(tensors)
+
+        batch: list[list[Detection]] = []
+        for timestamp, output in zip(timestamps, outputs):
+            detections: list[Detection] = []
+            for box, score, label in zip(
+                output["boxes"].float().cpu().numpy(),
+                output["scores"].float().cpu().numpy(),
+                output["labels"].cpu().numpy(),
+            ):
+                score = float(score)
+                if score < min_confidence:
+                    continue
+                if int(label) == COCO_PERSON:
+                    kind = "person"
+                elif include_ball and int(label) == COCO_SPORTS_BALL:
+                    kind = "ball"
+                else:
+                    continue
+                x1, y1, x2, y2 = (float(v) for v in box)
+                detections.append(
+                    Detection(timestamp=timestamp, box=(x1, y1, x2, y2), confidence=score, label=kind)
+                )
+            batch.append(detections)
+        return batch

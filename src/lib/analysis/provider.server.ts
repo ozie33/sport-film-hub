@@ -199,9 +199,9 @@ export function resolveAnalysisSettings(overrides?: Record<string, unknown>) {
   return {
     preRoll: Number(overrides?.["pre_roll"] ?? num("ANALYSIS_PRE_ROLL", DEFAULT_PRE_ROLL)),
     postRoll: Number(overrides?.["post_roll"] ?? num("ANALYSIS_POST_ROLL", DEFAULT_POST_ROLL)),
-    analysisFps: Number(overrides?.["analysis_fps"] ?? num("ANALYSIS_FPS", 5)),
+    analysisFps: Number(overrides?.["analysis_fps"] ?? num("ANALYSIS_FPS", 2)),
     detectionResolution: Number(
-      overrides?.["detection_resolution"] ?? num("ANALYSIS_DETECTION_RESOLUTION", 960),
+      overrides?.["detection_resolution"] ?? num("ANALYSIS_DETECTION_RESOLUTION", 640),
     ),
     detectionConfidence: Number(
       overrides?.["detection_confidence"] ?? num("ANALYSIS_DETECTION_CONFIDENCE", 0.35),

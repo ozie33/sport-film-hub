@@ -106,6 +106,19 @@ def _readiness() -> dict:
         "configured": bool(settings.api_key),
         "modelWeightsCached": os.path.isdir(os.environ.get("TORCH_HOME", "/models")),
         "activeJobs": registry.active_count(),
+        "performance": {
+            "detectorBackend": settings.detector_backend,
+            "fp16": settings.use_fp16,
+            "analysisFps": settings.analysis_fps,
+            "detectionResolution": settings.detection_resolution,
+            "batchSize": settings.batch_size,
+            "detectEveryNthFrame": settings.detect_every,
+            "reidIntervalSeconds": settings.reid_interval_seconds,
+            "courtFilter": settings.court_filter,
+            "deadTimeSkip": settings.dead_time_skip,
+            "frameCap": settings.max_frames or None,
+            "jobBudgetSeconds": settings.job_budget_seconds,
+        },
         **_device_details(),
     }
 
