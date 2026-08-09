@@ -371,7 +371,22 @@ export async function advanceAnalysis(supabase: Client, jobId: string) {
   // Debug frames are large; keep only a handful for the admin overlay.
   const debugFrames = (results.debugFrames ?? []).slice(0, 4);
 
-  const trackRows = results.tracks.map((track) => ({
+  // Long games can produce tens of thousands of raw tracks. Persist the ones the
+  // review workflow actually needs (candidate tracks first, then the strongest
+  // identity matches) and insert in chunks so a single request never stalls.
+  const MAX_PERSISTED_TRACKS = 2000;
+  const candidateTrackIds = new Set(results.candidates.map((candidate) => candidate.trackId));
+  const rankedTracks = results.tracks
+    .slice()
+    .sort((a, b) => {
+      const aPriority = candidateTrackIds.has(a.trackId) ? 1 : 0;
+      const bPriority = candidateTrackIds.has(b.trackId) ? 1 : 0;
+      if (aPriority !== bPriority) return bPriority - aPriority;
+      return b.identityConfidence - a.identityConfidence;
+    })
+    .slice(0, MAX_PERSISTED_TRACKS);
+
+  const trackRows = rankedTracks.map((track) => ({
     analysis_job_id: job.id,
     game_id: job.game_id,
     player_id: job.player_id,
@@ -387,13 +402,18 @@ export async function advanceAnalysis(supabase: Client, jobId: string) {
     metadata: track.metadata as never,
   }));
 
-  const { data: insertedTracks, error: trackError } = await supabase
-    .from("player_tracks")
-    .insert(trackRows)
-    .select("id, track_id");
-  if (trackError) throw trackError;
+  const insertedTracks: { id: string; track_id: string }[] = [];
+  const TRACK_CHUNK = 500;
+  for (let index = 0; index < trackRows.length; index += TRACK_CHUNK) {
+    const { data, error: trackError } = await supabase
+      .from("player_tracks")
+      .insert(trackRows.slice(index, index + TRACK_CHUNK))
+      .select("id, track_id");
+    if (trackError) throw trackError;
+    insertedTracks.push(...((data ?? []) as { id: string; track_id: string }[]));
+  }
 
-  const trackMap = new Map((insertedTracks ?? []).map((row) => [row.track_id, row.id]));
+  const trackMap = new Map(insertedTracks.map((row) => [row.track_id, row.id]));
 
   const candidateRows = results.candidates
     .slice()
@@ -421,8 +441,8 @@ export async function advanceAnalysis(supabase: Client, jobId: string) {
   const { error: candidateError } = await supabase.from("candidate_clips").insert(candidateRows);
   if (candidateError) throw candidateError;
 
-  const needsConfirmation = results.tracks.some((track) => track.needsConfirmation);
-  const lostAt = results.tracks.find((track) => track.needsConfirmation)?.startTime ?? null;
+  const needsConfirmation = rankedTracks.some((track) => track.needsConfirmation);
+  const lostAt = rankedTracks.find((track) => track.needsConfirmation)?.startTime ?? null;
 
   const { data: finished } = await supabase
     .from("analysis_jobs")
