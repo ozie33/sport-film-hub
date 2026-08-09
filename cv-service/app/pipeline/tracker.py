@@ -133,6 +133,8 @@ class MultiObjectTracker:
         self.max_missed = max_missed
         self.iou_threshold = iou_threshold
         self._next = 1
+        self.last_new_track_ids: set[str] = set()
+        self.reappeared_track_ids: set[str] = set()
 
     def _new_track(self, timestamp: float, box, confidence: float, sig: np.ndarray) -> Track:
         track = Track(track_id=f"t{self._next}")
@@ -153,6 +155,7 @@ class MultiObjectTracker:
         assigned: set[str] = set()
         result: list[tuple[Track, tuple[float, float, float, float]]] = []
         new_track_ids: set[str] = set()
+        reappeared: set[str] = set()
 
         for box, confidence, sig in detections:
             best_track: Track | None = None
@@ -184,6 +187,8 @@ class MultiObjectTracker:
                 best_track.signatures.append(sig)
             best_track.association_scores.append(best_score)
             best_track.last_timestamp = timestamp
+            if best_track.missed > 0:
+                reappeared.add(best_track.track_id)
             best_track.missed = 0
             assigned.add(best_track.track_id)
             result.append((best_track, box))
@@ -194,7 +199,7 @@ class MultiObjectTracker:
                 if track.missed > self.max_missed:
                     self.active.remove(track)
         self.last_new_track_ids = new_track_ids
-        self.reappeared_track_ids = set()
+        self.reappeared_track_ids = reappeared
         return result
 
     def propagate(
