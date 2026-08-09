@@ -34,6 +34,35 @@ from app.models import JobRequest, StatusResponse, SubmitResponse
 log = get_logger("cv.service")
 
 _startup_error: str | None = None
+_detector_info: dict = {}
+
+
+def _detector_runtime() -> dict:
+    """Actual loaded detector, warmed at startup so /ready never lies."""
+    global _detector_info
+    if _detector_info:
+        return _detector_info
+    try:
+        from app.pipeline.run import detector  # noqa: PLC0415
+
+        active = detector()
+        _detector_info = {
+            "backend": active.backend,
+            "requested": active.requested_backend,
+            "error": active.backend_error,
+            "fp16": active.half,
+            "version": active.version,
+        }
+    except Exception as error:  # noqa: BLE001
+        log.exception("detector warmup failed")
+        _detector_info = {
+            "backend": "unavailable",
+            "requested": settings.detector_backend,
+            "error": f"{type(error).__name__}: {error}",
+            "fp16": False,
+            "version": None,
+        }
+    return _detector_info
 
 
 def _device_name() -> str:
@@ -65,6 +94,14 @@ async def lifespan(_: FastAPI):
         raise
     for warning in warnings:
         log.warning("configuration warning: %s", warning)
+    runtime = _detector_runtime()
+    if runtime.get("backend") != settings.detector_backend and settings.detector_backend != "auto":
+        log.error(
+            "detector backend mismatch requested=%s active=%s error=%s",
+            settings.detector_backend,
+            runtime.get("backend"),
+            runtime.get("error"),
+        )
     log.info(
         "service startup complete version=%s device=%s workers=%d work_dir=%s "
         "analysis_fps=%s detection_resolution=%s max_frames=%s",
@@ -97,18 +134,23 @@ def authorize(authorization: str | None) -> None:
 
 
 def _readiness() -> dict:
+    runtime = _detector_runtime()
     return {
         "ready": bool(settings.api_key) and _startup_error is None,
         "serviceVersion": SERVICE_VERSION,
-        "personDetectorVersion": PERSON_DETECTOR_VERSION,
+        "personDetectorVersion": runtime.get("version") or PERSON_DETECTOR_VERSION,
         "trackerVersion": TRACKER_VERSION,
         "reidentificationVersion": REID_VERSION,
         "configured": bool(settings.api_key),
         "modelWeightsCached": os.path.isdir(os.environ.get("TORCH_HOME", "/models")),
         "activeJobs": registry.active_count(),
         "performance": {
-            "detectorBackend": settings.detector_backend,
-            "fp16": settings.use_fp16,
+            # Honest runtime values: what the detector ACTUALLY loaded, not what
+            # was requested by configuration.
+            "detectorBackend": runtime.get("backend") or "not_loaded",
+            "detectorBackendRequested": settings.detector_backend,
+            "detectorBackendError": runtime.get("error"),
+            "fp16": runtime.get("fp16", settings.use_fp16),
             "analysisFps": settings.analysis_fps,
             "detectionResolution": settings.detection_resolution,
             "batchSize": settings.batch_size,

@@ -29,6 +29,7 @@ def build_candidates(
     post_roll: float,
     duration: float,
     min_confidence: float,
+    gap_limit: float = 2.5,
 ) -> list[dict]:
     """Group consecutive high-involvement samples into candidate windows."""
     if len(samples) < 3:
@@ -67,7 +68,7 @@ def build_candidates(
 
     candidates: list[dict] = []
     group: list[tuple[int, float, str]] = [involved[0]]
-    gap_limit = 1.5
+    gap_limit = max(0.5, gap_limit)
 
     def flush(current: list[tuple[int, float, str]]) -> None:
         if not current:
