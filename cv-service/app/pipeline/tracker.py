@@ -32,6 +32,7 @@ class TrackPoint:
     timestamp: float
     box: tuple[float, float, float, float]
     detection_confidence: float
+    interpolated: bool = False
 
 
 @dataclass
@@ -42,6 +43,29 @@ class Track:
     association_scores: list[float] = field(default_factory=list)
     last_timestamp: float = 0.0
     missed: int = 0
+
+    @property
+    def velocity(self) -> tuple[float, float]:
+        """Constant-velocity estimate in pixels/second from recent points."""
+        if len(self.points) < 2:
+            return 0.0, 0.0
+        first, last = self.points[-3] if len(self.points) >= 3 else self.points[-2], self.points[-1]
+        dt = last.timestamp - first.timestamp
+        if dt <= 1e-6:
+            return 0.0, 0.0
+        fx = (last.box[0] + last.box[2]) / 2 - (first.box[0] + first.box[2]) / 2
+        fy = (last.box[1] + last.box[3]) / 2 - (first.box[1] + first.box[3]) / 2
+        return fx / dt, fy / dt
+
+    def predict(self, timestamp: float) -> tuple[float, float, float, float] | None:
+        """Where the box should be at `timestamp` with no new detection."""
+        if not self.points:
+            return None
+        last = self.points[-1]
+        dt = timestamp - last.timestamp
+        vx, vy = self.velocity
+        dx, dy = vx * dt, vy * dt
+        return (last.box[0] + dx, last.box[1] + dy, last.box[2] + dx, last.box[3] + dy)
 
     @property
     def start_time(self) -> float:
@@ -94,6 +118,7 @@ class Track:
                 "x2": round(point.box[2], 1),
                 "y2": round(point.box[3], 1),
                 "c": round(point.detection_confidence, 3),
+                "i": 1 if point.interpolated else 0,
             }
             for point in self.points[::step]
         ]
