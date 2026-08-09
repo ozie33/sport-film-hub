@@ -36,6 +36,16 @@ ENV PYTHONUNBUFFERED=1 \
     OPENCV_IO_ENABLE_OPENEXR=0 \
     QT_QPA_PLATFORM=offscreen \
     OMP_NUM_THREADS=4 \
+    YOLO_CONFIG_DIR=/models/ultralytics \
+    CV_YOLO_WEIGHTS=/models/yolov8n.pt \
+    CV_DETECTOR=yolo \
+    CV_FP16=true \
+    CV_BATCH_SIZE=32 \
+    CV_DETECT_EVERY=2 \
+    ANALYSIS_FPS=2 \
+    ANALYSIS_DETECTION_RESOLUTION=640 \
+    CV_MAX_FRAMES=0 \
+    CV_JOB_BUDGET_SECONDS=1500 \
     CV_LOG_LEVEL=INFO \
     PORT=8000
 
@@ -51,8 +61,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
 
 # Warm the detector weights into the image so cold starts don't download them.
-RUN mkdir -p /models "$CV_WORK_DIR" \
-    && python -c "from app.pipeline.detector import PersonDetector; PersonDetector()" \
+RUN mkdir -p /models /models/ultralytics "$CV_WORK_DIR" \
+    && python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')" \
+    && (test -f yolov8n.pt && mv yolov8n.pt /models/yolov8n.pt || true) \
+    && python -c "from app.pipeline.detector import PersonDetector; PersonDetector('torchvision')" \
     && chmod -R a+rX /models
 
 # Run unprivileged; the app only needs to write to CV_WORK_DIR.

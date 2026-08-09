@@ -449,13 +449,23 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                     handle_tracked_frame(timestamp)
             pending.clear()
 
-        decode_iterator = decode_io.iter_frames(
-            temp.path,
-            analysis_fps,
-            info.width,
-            info.height,
-            job_settings.detectionResolution,
-        )
+        if decode_io.ffmpeg_available():
+            decode_iterator = decode_io.iter_frames(
+                temp.path,
+                analysis_fps,
+                info.width,
+                info.height,
+                job_settings.detectionResolution,
+            )
+        else:
+            # Fallback only; ffmpeg is present in the production image.
+            log.warning("ffmpeg missing job=%s falling back to OpenCV decode", request.jobId)
+            decode_iterator = (
+                (timestamp, video_io.resize_for_detection(frame, job_settings.detectionResolution)[0])
+                for timestamp, frame in video_io.iter_frames(
+                    temp.path, analysis_fps, settings.max_frames or 10**9
+                )
+            )
         decode_started = time.perf_counter()
         while True:
             with timer.stage("decode"):
