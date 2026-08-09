@@ -791,7 +791,7 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                 "tracksAfterStitching": len(surviving),
                 "tracksKept": len(tracks_kept),
                 "trackletMerges": stitch_merges,
-                "impossibleJumpsRejected": tracker.rejected_impossible_jumps,
+                "impossibleJumpPairsRejected": tracker.rejected_impossible_jumps,
                 "trackingParameters": {
                     "iouThreshold": settings.track_iou_threshold,
                     "maxAgeSeconds": settings.track_max_age_seconds,
