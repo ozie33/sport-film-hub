@@ -47,6 +47,7 @@ from app.pipeline.reid import (
     region_means,
     signature,
 )
+from app.pipeline.target_recall import TargetRecallStats, recall_target_detections
 from app.pipeline.timing import StageTimer, gpu_stats
 from app.pipeline.tracker import MultiObjectTracker, stitch_tracks
 
@@ -183,6 +184,7 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
             scene_threshold=settings.dead_time_scene,
         )
         target_samples: list[TargetSample] = []
+        recall_stats = TargetRecallStats()
         ball_centres: dict[float, list[tuple[float, float]]] = {}
         identity_by_time: dict[float, float] = {}
         frame_width_hint = info.width or 1280
@@ -232,15 +234,16 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
             people = [d for d in detections if d.label == "person"]
             balls = [d for d in detections if d.label == "ball"]
             # Duplicate/overlapping person boxes fragment tracks: suppress first.
-            people, duplicates = suppress_duplicates(
+            people, duplicates, size_rejected = suppress_duplicates(
                 people,
                 settings.nms_iou_threshold,
                 settings.min_person_height_fraction,
                 frame.shape[0],
             )
             detections_deduplicated += duplicates
+            soft_rejected: list[tuple[object, str]] = [(d, "size") for d in size_rejected]
             if settings.court_filter:
-                people, dropped = filter_playing_area(
+                people, dropped, court_rejected = filter_playing_area(
                     people,
                     frame.shape[1],
                     frame.shape[0],
@@ -249,6 +252,28 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                     settings.court_max_height,
                 )
                 detections_dropped += dropped
+                soft_rejected.extend(court_rejected)
+
+            # Target recall: filtering is SOFT for the confirmed athlete only.
+            if settings.target_recall and soft_rejected:
+                with timer.stage("target_recall"):
+                    rescued = recall_target_detections(
+                        frame,
+                        soft_rejected,
+                        gallery,
+                        state.target_signature,
+                        state.last_target_box,
+                        appearance_threshold=settings.target_recall_appearance,
+                        near_appearance_threshold=settings.target_recall_near_appearance,
+                        near_radius_px=settings.target_recall_near_px,
+                        min_height_fraction=settings.target_min_height_fraction,
+                        max_per_frame=settings.target_recall_max_per_frame,
+                        court_confidence_penalty=settings.target_court_confidence_penalty,
+                        stats=recall_stats,
+                    )
+                if rescued:
+                    people = people + rescued
+                    detections_dropped = max(0, detections_dropped - len(rescued))
             detections_total += len(people)
             if balls:
                 ball_frames += 1
@@ -371,6 +396,7 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                     timestamp,
                     job_settings.confirmationThreshold,
                     reid_track_ids=None if reid_all else event_ids,
+                    recall=recall_stats,
                 )
 
             if chosen is None:
