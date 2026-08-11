@@ -272,6 +272,16 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                         stats=recall_stats,
                     )
                 if rescued:
+                    # Never let a rescue duplicate a box that already survived
+                    # filtering — duplicates are what fragmented tracks.
+                    from app.pipeline.tracker import iou as _iou
+
+                    rescued = [
+                        d
+                        for d in rescued
+                        if all(_iou(d.box, k.box) < settings.nms_iou_threshold for k in people)
+                    ]
+                if rescued:
                     people = people + rescued
                     detections_dropped = max(0, detections_dropped - len(rescued))
             detections_total += len(people)
