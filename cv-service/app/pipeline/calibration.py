@@ -41,10 +41,12 @@ POSITIVE_HIGH_ANCHOR = 0.85
 # plus an absolute floor so a noisy run cannot drive a gate to zero.
 DECISION_RULES: dict[str, tuple[float, float]] = {
     # kind:            (percentile, floor)
+    # Phase 3G: retain/lock stay where 0.5.2 had them (identity-swap safety);
+    # only the rescue / re-acquisition gates are loosened, and only slightly.
     "retain": (8.0, 0.26),
-    "rescue_near": (14.0, 0.30),
-    "reacquire": (22.0, 0.36),
-    "rescue": (32.0, 0.42),
+    "rescue_near": (10.0, 0.26),
+    "reacquire": (18.0, 0.32),
+    "rescue": (24.0, 0.36),
     "lock": (40.0, 0.46),
 }
 
