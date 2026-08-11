@@ -48,7 +48,7 @@ class TrackPoint:
     interpolated: bool = False
 
 
-@dataclass
+@dataclass(eq=False)
 class Track:
     track_id: str
     points: list[TrackPoint] = field(default_factory=list)
@@ -296,7 +296,7 @@ class MultiObjectTracker:
         for track in list(self.active):
             last = track.last_real
             if last is None or timestamp - last.timestamp > self.max_age_seconds:
-                self.active.remove(track)
+                self.active = [t for t in self.active if t is not track]
         self.last_new_track_ids = new_track_ids
         self.reappeared_track_ids = reappeared
         return result

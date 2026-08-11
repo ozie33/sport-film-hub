@@ -3,10 +3,10 @@
 import os
 from dataclasses import dataclass
 
-SERVICE_VERSION = "cv-service-0.5.0"
+SERVICE_VERSION = "cv-service-0.5.1"
 PERSON_DETECTOR_VERSION = "yolov8n-coco-fp16-0.2"
 TRACKER_VERSION = "iou-proximity-stitch-tracker-0.5-targetrecall"
-REID_VERSION = "resnet18-embed+colorhist-referencebank-0.6-appearance"
+REID_VERSION = "resnet18-embed+colorhist-referencebank-0.6.1-appearance"
 EMBEDDING_VERSION = "resnet18-imagenet-centered-flipavg-0.1"
 
 

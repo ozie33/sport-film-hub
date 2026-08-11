@@ -177,7 +177,17 @@ def uniform_affinity(
     return best
 
 
-@dataclass
+def _drop(entries: list, target) -> None:
+    """Remove by identity. `list.remove` would use `==`, and these entries hold
+    numpy vectors, so dataclass equality raises "truth value of an array ...
+    is ambiguous" once the bank fills up mid-film."""
+    for index, item in enumerate(entries):
+        if item is target:
+            del entries[index]
+            return
+
+
+@dataclass(eq=False)
 class ReferenceEntry:
     vector: np.ndarray
     trust: str
@@ -281,14 +291,14 @@ class ReferenceBank:
         same_pose = [e for e in self.entries if e.trust == trust and e.pose == pose]
         if len(same_pose) > per_pose:
             worst = min(same_pose, key=lambda e: e.quality)
-            self.entries.remove(worst)
+            _drop(self.entries, worst)
             self.evicted += 1
         cap = settings.reference_max_confirmed if trust in ("high", "auto") else settings.reference_max_library
         tier = [e for e in self.entries if e.trust == trust]
         while len(tier) > max(1, cap):
             worst = min(tier, key=lambda e: e.quality)
-            self.entries.remove(worst)
-            tier.remove(worst)
+            _drop(self.entries, worst)
+            _drop(tier, worst)
             self.evicted += 1
 
     # -------------------------------------------------------------- scoring
