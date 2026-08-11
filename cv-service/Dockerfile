@@ -4,7 +4,7 @@
 FROM python:3.11-slim
 
 # Build metadata (supplied by CI; harmless defaults for local builds).
-ARG SERVICE_VERSION=cv-service-0.1.0
+ARG SERVICE_VERSION=cv-service-0.4.0
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
 LABEL org.opencontainers.image.title="Player Analysis CV Service" \
@@ -42,6 +42,11 @@ ENV PYTHONUNBUFFERED=1 \
     CV_FP16=true \
     CV_BATCH_SIZE=32 \
     CV_DETECT_EVERY=2 \
+    CV_TARGET_RECALL=true \
+    CV_TARGET_RETAIN_THRESHOLD=0.30 \
+    CV_TARGET_REACQUIRE_THRESHOLD=0.34 \
+    CV_TARGET_MIN_HEIGHT=0.018 \
+    CV_TARGET_MEMORY_SECONDS=3.0 \
     ANALYSIS_FPS=2 \
     ANALYSIS_DETECTION_RESOLUTION=640 \
     CV_MAX_FRAMES=0 \
