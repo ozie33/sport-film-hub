@@ -98,10 +98,6 @@ def _embedder_runtime() -> dict:
     return _embedder_info
 
 
-def _device_details() -> dict:
-    ...
-
-
 def _calibration_preview() -> dict:
     """Cold-start (unprimed) calibrated gates, for operator inspection only."""
     try:
@@ -116,7 +112,7 @@ def _calibration_preview() -> dict:
         return {}
 
 
-def _device_details_impl() -> dict:
+def _device_details() -> dict:
     cuda = torch.cuda.is_available()
     return {
         "device": _device_name(),
