@@ -29,6 +29,8 @@ class IdentityState:
     target_track_id: str | None = None
     target_signature: np.ndarray | None = None
     switches: int = 0
+    # Phase 3G: why the target changed, so switches can be audited.
+    switch_causes: dict[str, int] = field(default_factory=dict)
     per_track_scores: dict[str, list[float]] = field(default_factory=dict)
     needs_confirmation: list[dict] = field(default_factory=list)
     low_confidence_intervals: int = 0
@@ -81,6 +83,10 @@ class IdentityState:
     def note_reid(self, reason: str) -> None:
         self.reid_evaluations += 1
         self.reid_reasons[reason] = self.reid_reasons.get(reason, 0) + 1
+
+    def note_switch(self, cause: str) -> None:
+        self.switches += 1
+        self.switch_causes[cause] = self.switch_causes.get(cause, 0) + 1
 
     def record(self, track_id: str, score: float) -> None:
         self.per_track_scores.setdefault(track_id, []).append(score)
@@ -221,6 +227,8 @@ def choose_target(
         if gallery.has_confirmed
         else lock_threshold
     )
+    # Hysteresis: holding the current target is cheaper than acquiring a new one.
+    retain_threshold = max(0.05, retain_threshold - settings.target_hysteresis_bonus)
 
     # Target lock: while the selected athlete is still tracked and plausible, do
     # not rescore every player on the floor.
@@ -293,6 +301,8 @@ def choose_target(
             calib.note_decision("reacquire", accepted)
             if accepted:
                 state.target_track_id = candidate[0].track_id
+                if state.target_track_id != candidate[0].track_id:
+                    state.note_switch("reacquisition")
                 state.target_signature = candidate[0].mean_signature
                 state.locked = True
                 state.lock_time = timestamp
@@ -363,7 +373,9 @@ def choose_target(
             state._challenger_streak = 1
         if current is not None and state._challenger_streak < settings.target_switch_frames:
             return current[0], current[1]
-        state.switches += 1
+        state.note_switch(
+            "sustained_challenger" if current is not None else "target_lost"
+        )
         state._challenger_streak = 0
 
     state.target_track_id = best_track.track_id
