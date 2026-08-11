@@ -24,6 +24,7 @@ import { Route as AuthenticatedGamesIndexRouteImport } from './routes/_authentic
 import { Route as AuthenticatedGamesGameIdRouteImport } from './routes/_authenticated/games.$gameId'
 import { Route as AuthenticatedPlayersIndexRouteImport } from './routes/_authenticated/players.index'
 import { Route as AuthenticatedPlayersPlayerIdRouteImport } from './routes/_authenticated/players.$playerId'
+import { Route as ApiPublicCvRerunTempRouteImport } from './routes/api/public/cv-rerun-temp'
 import { Route as OauthGoogleDriveReturnRouteImport } from './routes/oauth/google-drive.return'
 import { Route as ApiPublicDriveStreamAssetIdRouteImport } from './routes/api/public/drive-stream.$assetId'
 
@@ -106,6 +107,11 @@ const AuthenticatedPlayersPlayerIdRoute =
     path: '/players/$playerId',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const ApiPublicCvRerunTempRoute = ApiPublicCvRerunTempRouteImport.update({
+  id: '/api/public/cv-rerun-temp',
+  path: '/api/public/cv-rerun-temp',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OauthGoogleDriveReturnRoute = OauthGoogleDriveReturnRouteImport.update({
   id: '/oauth/google-drive/return',
   path: '/oauth/google-drive/return',
@@ -131,6 +137,7 @@ export interface FileRoutesByFullPath {
   '/analysis/$jobId': typeof AuthenticatedAnalysisJobIdRoute
   '/games/$gameId': typeof AuthenticatedGamesGameIdRoute
   '/players/$playerId': typeof AuthenticatedPlayersPlayerIdRoute
+  '/api/public/cv-rerun-temp': typeof ApiPublicCvRerunTempRoute
   '/oauth/google-drive/return': typeof OauthGoogleDriveReturnRoute
   '/games/': typeof AuthenticatedGamesIndexRoute
   '/players/': typeof AuthenticatedPlayersIndexRoute
@@ -149,6 +156,7 @@ export interface FileRoutesByTo {
   '/analysis/$jobId': typeof AuthenticatedAnalysisJobIdRoute
   '/games/$gameId': typeof AuthenticatedGamesGameIdRoute
   '/players/$playerId': typeof AuthenticatedPlayersPlayerIdRoute
+  '/api/public/cv-rerun-temp': typeof ApiPublicCvRerunTempRoute
   '/oauth/google-drive/return': typeof OauthGoogleDriveReturnRoute
   '/games': typeof AuthenticatedGamesIndexRoute
   '/players': typeof AuthenticatedPlayersIndexRoute
@@ -169,6 +177,7 @@ export interface FileRoutesById {
   '/_authenticated/analysis/$jobId': typeof AuthenticatedAnalysisJobIdRoute
   '/_authenticated/games/$gameId': typeof AuthenticatedGamesGameIdRoute
   '/_authenticated/players/$playerId': typeof AuthenticatedPlayersPlayerIdRoute
+  '/api/public/cv-rerun-temp': typeof ApiPublicCvRerunTempRoute
   '/oauth/google-drive/return': typeof OauthGoogleDriveReturnRoute
   '/_authenticated/games/': typeof AuthenticatedGamesIndexRoute
   '/_authenticated/players/': typeof AuthenticatedPlayersIndexRoute
@@ -189,6 +198,7 @@ export interface FileRouteTypes {
     | '/analysis/$jobId'
     | '/games/$gameId'
     | '/players/$playerId'
+    | '/api/public/cv-rerun-temp'
     | '/oauth/google-drive/return'
     | '/games/'
     | '/players/'
@@ -207,6 +217,7 @@ export interface FileRouteTypes {
     | '/analysis/$jobId'
     | '/games/$gameId'
     | '/players/$playerId'
+    | '/api/public/cv-rerun-temp'
     | '/oauth/google-drive/return'
     | '/games'
     | '/players'
@@ -226,6 +237,7 @@ export interface FileRouteTypes {
     | '/_authenticated/analysis/$jobId'
     | '/_authenticated/games/$gameId'
     | '/_authenticated/players/$playerId'
+    | '/api/public/cv-rerun-temp'
     | '/oauth/google-drive/return'
     | '/_authenticated/games/'
     | '/_authenticated/players/'
@@ -237,6 +249,7 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  ApiPublicCvRerunTempRoute: typeof ApiPublicCvRerunTempRoute
   OauthGoogleDriveReturnRoute: typeof OauthGoogleDriveReturnRoute
   ApiPublicDriveStreamAssetIdRoute: typeof ApiPublicDriveStreamAssetIdRoute
 }
@@ -348,6 +361,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPlayersPlayerIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/api/public/cv-rerun-temp': {
+      id: '/api/public/cv-rerun-temp'
+      path: '/api/public/cv-rerun-temp'
+      fullPath: '/api/public/cv-rerun-temp'
+      preLoaderRoute: typeof ApiPublicCvRerunTempRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/oauth/google-drive/return': {
       id: '/oauth/google-drive/return'
       path: '/oauth/google-drive/return'
@@ -401,6 +421,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  ApiPublicCvRerunTempRoute: ApiPublicCvRerunTempRoute,
   OauthGoogleDriveReturnRoute: OauthGoogleDriveReturnRoute,
   ApiPublicDriveStreamAssetIdRoute: ApiPublicDriveStreamAssetIdRoute,
 }
