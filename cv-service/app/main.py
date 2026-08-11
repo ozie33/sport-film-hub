@@ -99,6 +99,24 @@ def _embedder_runtime() -> dict:
 
 
 def _device_details() -> dict:
+    ...
+
+
+def _calibration_preview() -> dict:
+    """Cold-start (unprimed) calibrated gates, for operator inspection only."""
+    try:
+        from app.pipeline.calibration import SimilarityCalibrator  # noqa: PLC0415
+
+        preview = SimilarityCalibrator(
+            enabled=settings.similarity_calibration,
+            min_positive_samples=settings.calibration_min_positives,
+        )
+        return preview.thresholds()
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _device_details_impl() -> dict:
     cuda = torch.cuda.is_available()
     return {
         "device": _device_name(),
