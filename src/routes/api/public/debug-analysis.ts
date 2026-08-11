@@ -26,7 +26,21 @@ export const Route = createFileRoute("/api/public/debug-analysis")({
         if (!userId) return new Response("unauthorized", { status: 401 });
         const body = (await request.json()) as Record<string, string>;
         try {
-          const { submitAnalysis } = await import("@/lib/analysis/analysis-engine.server");
+          const { submitAnalysis, advanceAnalysis } = await import(
+            "@/lib/analysis/analysis-engine.server"
+          );
+          if (body["jobId"]) {
+            const job = (await advanceAnalysis(supabase as never, body["jobId"])) as Record<
+              string,
+              unknown
+            >;
+            return Response.json({
+              ok: true,
+              status: job["status"],
+              stage: job["current_stage"],
+              progress: job["progress_percent"],
+            });
+          }
           const job = await submitAnalysis(supabase as never, userId, body as never);
           return Response.json({ ok: true, jobId: (job as { id: string }).id });
         } catch (error) {
