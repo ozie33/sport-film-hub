@@ -49,7 +49,7 @@ from app.pipeline.reid import (
 )
 from app.pipeline.target_recall import TargetRecallStats, recall_target_detections
 from app.pipeline.timing import StageTimer, gpu_stats
-from app.pipeline.tracker import MultiObjectTracker, stitch_tracks
+from app.pipeline.tracker import MultiObjectTracker, iou as box_iou, stitch_tracks
 
 log = get_logger("cv.pipeline")
 
@@ -274,12 +274,10 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                 if rescued:
                     # Never let a rescue duplicate a box that already survived
                     # filtering — duplicates are what fragmented tracks.
-                    from app.pipeline.tracker import iou as _iou
-
                     rescued = [
                         d
                         for d in rescued
-                        if all(_iou(d.box, k.box) < settings.nms_iou_threshold for k in people)
+                        if all(box_iou(d.box, k.box) < settings.nms_iou_threshold for k in people)
                     ]
                 if rescued:
                     people = people + rescued
