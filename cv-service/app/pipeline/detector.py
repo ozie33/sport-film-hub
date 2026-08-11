@@ -41,19 +41,25 @@ def suppress_duplicates(
     iou_threshold: float,
     min_height_fraction: float,
     frame_height: int,
-) -> tuple[list[Detection], int]:
+) -> tuple[list[Detection], int, list[Detection]]:
     """Remove overlapping duplicate person boxes and tiny non-player boxes.
 
     Duplicate detections were a direct cause of track fragmentation: two boxes
     on one athlete alternate ownership of the track and split it in half.
+
+    Phase 3E: boxes rejected purely for being small are returned as well, so the
+    target-recall pass can rescue the selected athlete on poor-resolution film
+    without loosening the generic filter for everyone else.
     """
     kept: list[Detection] = []
+    size_rejected: list[Detection] = []
     dropped = 0
     for detection in sorted(detections, key=lambda d: d.confidence, reverse=True):
         if detection.label == "person":
             height = (detection.box[3] - detection.box[1]) / max(1.0, float(frame_height))
             if height < min_height_fraction:
                 dropped += 1
+                size_rejected.append(detection)
                 continue
         duplicate = False
         for existing in kept:
@@ -66,7 +72,7 @@ def suppress_duplicates(
             dropped += 1
             continue
         kept.append(detection)
-    return kept, dropped
+    return kept, dropped, size_rejected
 
 
 class PersonDetector:

@@ -19,27 +19,37 @@ def filter_playing_area(
     top_exclude_fraction: float,
     min_height_fraction: float,
     max_height_fraction: float,
-) -> tuple[list, int]:
-    """Drop detections that cannot be on-court players (crowd, bench, artefacts)."""
+) -> tuple[list, int, list[tuple[object, str]]]:
+    """Drop detections that cannot be on-court players (crowd, bench, artefacts).
+
+    Phase 3E: rejected detections are returned with the reason that rejected
+    them ("court", "size", "aspect"). The target-recall pass re-examines them
+    with appearance evidence so the selected athlete is never silently removed
+    by a geometric heuristic; generic players stay filtered.
+    """
     kept = []
     dropped = 0
+    rejected: list[tuple[object, str]] = []
     for detection in detections:
         x1, y1, x2, y2 = detection.box
         height_fraction = (y2 - y1) / max(1.0, float(frame_height))
         bottom_fraction = y2 / max(1.0, float(frame_height))
         if bottom_fraction < top_exclude_fraction:
             dropped += 1
+            rejected.append((detection, "court"))
             continue
         if height_fraction < min_height_fraction or height_fraction > max_height_fraction:
             dropped += 1
+            rejected.append((detection, "size"))
             continue
         width = x2 - x1
         if width <= 1 or (y2 - y1) / max(1.0, width) < 0.8:
             # Wider than tall: crowd blobs and scoreboard artefacts, not a player.
             dropped += 1
+            rejected.append((detection, "aspect"))
             continue
         kept.append(detection)
-    return kept, dropped
+    return kept, dropped, rejected
 
 
 @dataclass
