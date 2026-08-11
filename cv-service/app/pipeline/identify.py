@@ -19,6 +19,7 @@ import numpy as np
 
 from app.config import settings
 from app.pipeline.reid import ReferenceGallery, similarity, uniform_affinity
+from app.pipeline.target_recall import TargetRecallStats
 from app.pipeline.tracker import Track, iou
 
 
@@ -39,6 +40,13 @@ class IdentityState:
     cached_scores: dict[str, float] = field(default_factory=dict)
     reid_evaluations: int = 0
     reid_reasons: dict[str, int] = field(default_factory=dict)
+    # Phase 3E target memory.
+    last_target_box: tuple[float, float, float, float] | None = None
+    last_target_time: float | None = None
+
+    def remember_target(self, box, timestamp: float) -> None:
+        self.last_target_box = box
+        self.last_target_time = timestamp
 
     def remap(self, alias_to_canonical: dict[str, str]) -> None:
         """After tracklet stitching, fold scores onto the surviving track ids."""
@@ -143,11 +151,16 @@ def choose_target(
     timestamp: float,
     confirmation_threshold: float,
     reid_track_ids: set[str] | None = None,
+    recall: TargetRecallStats | None = None,
 ) -> tuple[Track, float] | None:
     """Pick the track most likely to be the selected athlete.
 
     When confidence is weak the current target is retained rather than jumping
     to another player, and a confirmation request is emitted instead.
+
+    Phase 3E: retaining and re-acquiring the confirmed target uses target-only
+    thresholds (lower than the generic confirmation threshold). Non-target
+    association and switching stay exactly as strict as before.
     """
     if not observations:
         return None
@@ -155,6 +168,11 @@ def choose_target(
     target_id = state.target_track_id
     locked_target = next(
         (item for item in observations if item[0].track_id == target_id), None
+    )
+    retain_threshold = (
+        settings.target_retain_threshold
+        if gallery.has_confirmed
+        else settings.target_lock_threshold
     )
 
     # Target lock: while the selected athlete is still tracked and plausible, do
@@ -168,13 +186,16 @@ def choose_target(
             state.cached_scores[track.track_id] = score
         else:
             score = state.cached_scores.get(track.track_id, 0.0)
-        if score >= settings.target_lock_threshold:
+        # A temporary low-confidence detection must not break the lock: the
+        # target only needs to clear the (lower) retain threshold.
+        if score >= min(settings.target_lock_threshold, retain_threshold):
             state.record(track.track_id, score)
             state._low_open = False
             state._low_since = None
             state._challenger_streak = 0
             if signature is not None and getattr(signature, "size", 0):
                 state.target_signature = track.mean_signature
+            state.remember_target(box, timestamp)
             return track, score
 
     scored: list[tuple[Track, float, tuple[float, float, float, float]]] = []
@@ -194,6 +215,45 @@ def choose_target(
 
     scored.sort(key=lambda item: item[1], reverse=True)
     best_track, best_score, _ = scored[0]
+
+    # ------------------------------------------------------- re-acquisition
+    # The established target is not among the observed tracks (occlusion ended
+    # with a fresh track id, or the old track aged out). Search nearby plausible
+    # candidates first and only widen if nothing near matches.
+    if state.target_track_id and locked_target is None and gallery.has_confirmed:
+        last_box = state.last_target_box
+        near: list[tuple[Track, float, tuple[float, float, float, float]]] = []
+        far: list[tuple[Track, float, tuple[float, float, float, float]]] = []
+        for track, score, box in scored:
+            if last_box is None:
+                far.append((track, score, box))
+                continue
+            lx = (last_box[0] + last_box[2]) / 2
+            ly = (last_box[1] + last_box[3]) / 2
+            cx = (box[0] + box[2]) / 2
+            cy = (box[1] + box[3]) / 2
+            distance = float(np.hypot(cx - lx, cy - ly))
+            (near if distance <= settings.target_recall_near_px else far).append(
+                (track, score, box)
+            )
+        for bucket in (near, far):
+            if not bucket:
+                continue
+            candidate = max(bucket, key=lambda item: item[1])
+            if candidate[1] >= settings.target_reacquire_threshold:
+                state.target_track_id = candidate[0].track_id
+                state.target_signature = candidate[0].mean_signature
+                state.locked = True
+                state.lock_time = timestamp
+                state.remember_target(candidate[2], timestamp)
+                state.record(candidate[0].track_id, candidate[1])
+                state._low_open = False
+                state._low_since = None
+                if recall is not None:
+                    recall.reacquisitions += 1
+                return candidate[0], candidate[1]
+        if recall is not None:
+            recall.failed_reacquisitions += 1
 
     if best_score < confirmation_threshold:
         # Do not switch players on weak evidence. Only ask the user when the
@@ -228,7 +288,8 @@ def choose_target(
         current = next(
             (item for item in scored if item[0].track_id == state.target_track_id), None
         )
-        if current is not None:
+        if current is not None and current[1] >= min(retain_threshold, confirmation_threshold):
+            state.remember_target(current[2], timestamp)
             return current[0], current[1]
         return None
 
@@ -256,6 +317,7 @@ def choose_target(
 
     state.target_track_id = best_track.track_id
     state.target_signature = best_track.mean_signature
+    state.remember_target(scored[0][2], timestamp)
     if best_score >= max(settings.target_lock_threshold, confirmation_threshold):
         if not state.locked:
             state.lock_time = timestamp
