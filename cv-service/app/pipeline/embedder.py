@@ -122,7 +122,10 @@ class AppearanceEmbedder:
         """Remove the generic component, then L2-normalise."""
         vectors = raw.astype(np.float32)
         if settings.embed_center and self._mean is not None and self._mean_samples >= 32:
-            vectors = vectors - self._mean
+            # Phase 3F.1: full subtraction removed too much shared signal and
+            # compressed genuine same-athlete cosines. Subtract only a fraction.
+            strength = float(max(0.0, min(1.0, settings.embed_center_strength)))
+            vectors = vectors - strength * self._mean
         norms = np.linalg.norm(vectors, axis=1, keepdims=True)
         norms[norms == 0] = 1.0
         return vectors / norms
@@ -175,6 +178,7 @@ class AppearanceEmbedder:
             "embeddingDevice": self.device.type,
             "embeddingsComputed": self.embeddings_computed,
             "embeddingCentering": bool(settings.embed_center),
+            "embeddingCenteringStrength": float(settings.embed_center_strength),
             "embeddingFlipAveraged": bool(settings.embed_flip_average),
         }
 
