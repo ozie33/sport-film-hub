@@ -3,11 +3,11 @@
 import os
 from dataclasses import dataclass
 
-SERVICE_VERSION = "cv-service-0.5.1"
+SERVICE_VERSION = "cv-service-0.5.2"
 PERSON_DETECTOR_VERSION = "yolov8n-coco-fp16-0.2"
 TRACKER_VERSION = "iou-proximity-stitch-tracker-0.5-targetrecall"
-REID_VERSION = "resnet18-embed+colorhist-referencebank-0.6.1-appearance"
-EMBEDDING_VERSION = "resnet18-imagenet-centered-flipavg-0.1"
+REID_VERSION = "resnet18-embed+colorhist-referencebank-0.7.0-calibrated"
+EMBEDDING_VERSION = "resnet18-imagenet-softcentered-flipavg-0.2"
 
 
 def _f(key: str, default: float) -> float:
@@ -80,8 +80,10 @@ class Settings:
     target_recall_max_per_frame: int = _i("CV_TARGET_RECALL_MAX_PER_FRAME", 2)
     target_court_confidence_penalty: float = _f("CV_TARGET_COURT_PENALTY", 0.85)
     # Retaining an established target is cheaper than re-acquiring it.
-    target_retain_threshold: float = _f("CV_TARGET_RETAIN_THRESHOLD", 0.30)
-    target_reacquire_threshold: float = _f("CV_TARGET_REACQUIRE_THRESHOLD", 0.34)
+    # Phase 3F.1: these are FALLBACKS. When similarity calibration is on, the
+    # live gates come from percentiles of the calibrated positive distribution.
+    target_retain_threshold: float = _f("CV_TARGET_RETAIN_THRESHOLD", 0.26)
+    target_reacquire_threshold: float = _f("CV_TARGET_REACQUIRE_THRESHOLD", 0.36)
     # Short target memory: predicted motion carries the target through gaps.
     target_memory_seconds: float = _f("CV_TARGET_MEMORY_SECONDS", 3.0)
     confirmation_min_seconds: float = _f("CV_CONFIRMATION_MIN_SECONDS", 6.0)
@@ -95,7 +97,12 @@ class Settings:
     embed_batch_size: int = _i("CV_EMBED_BATCH", 64)
     embed_flip_average: bool = os.environ.get("CV_EMBED_FLIP", "true") != "false"
     embed_center: bool = os.environ.get("CV_EMBED_CENTER", "true") != "false"
+    # Phase 3F.1: full mean subtraction compressed genuine positives. Softened.
+    embed_center_strength: float = _f("CV_EMBED_CENTER_STRENGTH", 0.5)
     embed_mean_momentum: float = _f("CV_EMBED_MEAN_MOMENTUM", 0.02)
+    # --- Phase 3F.1: appearance-similarity calibration --------------------
+    similarity_calibration: bool = os.environ.get("CV_SIMILARITY_CALIBRATION", "true") != "false"
+    calibration_min_positives: int = _i("CV_CALIBRATION_MIN_POSITIVES", 12)
     # Reference bank (multi-view, quality scored).
     reference_top_k: int = _i("CV_REFERENCE_TOP_K", 3)
     reference_min_quality: float = _f("CV_REFERENCE_MIN_QUALITY", 0.34)
@@ -176,6 +183,16 @@ def validate_settings(s: Settings = settings) -> list[str]:
         errors.append("CV_DETECT_EVERY must be at least 1.")
     if not 0 <= s.embed_weight <= 0.95:
         errors.append("CV_EMBED_WEIGHT must be between 0 and 0.95.")
+    if not 0 <= s.embed_center_strength <= 1:
+        errors.append("CV_EMBED_CENTER_STRENGTH must be between 0 and 1.")
+    if s.calibration_min_positives < 2:
+        errors.append("CV_CALIBRATION_MIN_POSITIVES must be at least 2.")
+    if not s.similarity_calibration:
+        warnings.append(
+            "CV_SIMILARITY_CALIBRATION is disabled; learned-embedding similarity "
+            "is compared against fixed histogram-era thresholds and target "
+            "recall will suffer."
+        )
     if s.embed_height < 64 or s.embed_width < 32:
         errors.append("CV_EMBED_HEIGHT/CV_EMBED_WIDTH are too small (min 64x32).")
     if s.reference_top_k < 1:

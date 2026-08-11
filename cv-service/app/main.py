@@ -98,6 +98,20 @@ def _embedder_runtime() -> dict:
     return _embedder_info
 
 
+def _calibration_preview() -> dict:
+    """Cold-start (unprimed) calibrated gates, for operator inspection only."""
+    try:
+        from app.pipeline.calibration import SimilarityCalibrator  # noqa: PLC0415
+
+        preview = SimilarityCalibrator(
+            enabled=settings.similarity_calibration,
+            min_positive_samples=settings.calibration_min_positives,
+        )
+        return preview.thresholds()
+    except Exception:  # noqa: BLE001
+        return {}
+
+
 def _device_details() -> dict:
     cuda = torch.cuda.is_available()
     return {
@@ -193,6 +207,10 @@ def _readiness() -> dict:
             "targetReacquireThreshold": settings.target_reacquire_threshold,
             "targetMinHeightFraction": settings.target_min_height_fraction,
             "targetMemorySeconds": settings.target_memory_seconds,
+            "similarityCalibration": settings.similarity_calibration,
+            "calibrationMinPositives": settings.calibration_min_positives,
+            "embeddingCenteringStrength": settings.embed_center_strength,
+            "calibrationColdStartThresholds": _calibration_preview(),
             "frameCap": settings.max_frames or None,
             "jobBudgetSeconds": settings.job_budget_seconds,
         },

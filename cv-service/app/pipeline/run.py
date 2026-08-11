@@ -50,6 +50,7 @@ from app.pipeline.reid import (
     signatures_batch,
 )
 from app.pipeline.embedder import embedder
+from app.pipeline.calibration import reset_calibrator
 from app.pipeline.target_recall import TargetRecallStats, recall_target_detections
 from app.pipeline.timing import StageTimer, gpu_stats
 from app.pipeline.tracker import MultiObjectTracker, iou as box_iou, stitch_tracks
@@ -143,13 +144,23 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
         )
 
         progress("identifying_player", "Loading reference media", 12)
+        # A fresh calibrator per job: thresholds are derived from THIS film.
+        calib = reset_calibrator()
         with timer.stage("references"):
             gallery = _load_reference_signatures(request.references)
+        gallery.prime_calibration()
         log.info(
             "reference media queued job=%s images=%d confirmed=%d",
             request.jobId,
             len(gallery.entries) + len(gallery.pending),
             len(gallery.high),
+        )
+        log.info(
+            "similarity calibration job=%s enabled=%s primed=%d thresholds=%s",
+            request.jobId,
+            calib.enabled,
+            len(calib.primed_positives),
+            calib.thresholds(),
         )
 
         active_detector = detector()
@@ -405,6 +416,9 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                         state.locked = True
                         state.lock_time = timestamp
                         confirmation_matches += 1
+                        # Confirmed same-game crops are the primary calibration
+                        # set — re-prime so gates track the trusted tier.
+                        gallery.prime_calibration()
                         torso_mean, legs_mean = region_means(frame, target_box)
                         if torso_mean is not None:
                             confirmed_torso.append(torso_mean)
@@ -928,8 +942,11 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                     "targetRecallNearAppearance": settings.target_recall_near_appearance,
                     "targetRecallNearPx": settings.target_recall_near_px,
                     "targetMemorySeconds": settings.target_memory_seconds,
+                    "similarityCalibration": settings.similarity_calibration,
+                    "calibratedThresholds": calib.thresholds(),
                 },
                 "targetRecall": recall_stats.payload(),
+                "calibration": calib.payload(),
                 "appearance": {
                     **embedder().stats(),
                     **gallery.payload(),
@@ -939,6 +956,7 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                     "referenceTopK": settings.reference_top_k,
                     "autoReferencesCollected": auto_references_added,
                     "autoReferenceCollection": settings.auto_reference_collect,
+                    "calibratedThresholds": calib.thresholds(),
                 },
                 "framesWithTarget": target_frames,
                 "targetTrackingCoverage": coverage,
