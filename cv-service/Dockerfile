@@ -4,7 +4,7 @@
 FROM python:3.11-slim
 
 # Build metadata (supplied by CI; harmless defaults for local builds).
-ARG SERVICE_VERSION=cv-service-0.5.2
+ARG SERVICE_VERSION=cv-service-0.6.0
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
 LABEL org.opencontainers.image.title="Player Analysis CV Service" \

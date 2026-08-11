@@ -217,6 +217,12 @@ class ReferenceBank:
     evicted: int = 0
     positive_scores: list[float] = field(default_factory=list)
     rejected_scores: list[float] = field(default_factory=list)
+    # Phase 3G prototype-bank diagnostics.
+    prototype_hits: int = 0
+    full_bank_fallbacks: int = 0
+    prototype_rebuilds: int = 0
+    _prototypes: list[ReferenceEntry] = field(default_factory=list)
+    _prototype_stamp: tuple[int, int] = (-1, -1)
 
     # ------------------------------------------------------------- mutation
     def add(
@@ -303,14 +309,35 @@ class ReferenceBank:
             self.evicted += 1
 
     # -------------------------------------------------------------- scoring
-    def score_raw(self, vector: np.ndarray | None, *, top_k: int | None = None) -> float:
-        """Trust-weighted top-k match in RAW cosine space (uncalibrated)."""
-        self.flush_pending()
-        if vector is None or vector.size == 0 or not self.entries:
-            return 0.0
-        k = max(1, top_k or settings.reference_top_k)
+    def prototypes(self) -> list[ReferenceEntry]:
+        """Compact set of representative reference views.
+
+        One best entry per (trust, pose) bucket ordered by trust weight then
+        quality, capped at `CV_PROTOTYPE_COUNT`. Rebuilt only when the bank
+        actually changes, so the common path is a cheap list read.
+        """
+        stamp = (len(self.entries), self.evicted)
+        if stamp == self._prototype_stamp and self._prototypes:
+            return self._prototypes
+        buckets: dict[tuple[str, str], ReferenceEntry] = {}
+        for entry in self.entries:
+            key = (entry.trust, entry.pose)
+            current = buckets.get(key)
+            if current is None or entry.quality > current.quality:
+                buckets[key] = entry
+        ordered = sorted(
+            buckets.values(), key=lambda e: (e.weight, e.quality), reverse=True
+        )
+        self._prototypes = ordered[: max(1, settings.prototype_count)]
+        self._prototype_stamp = stamp
+        self.prototype_rebuilds += 1
+        return self._prototypes
+
+    def _score_entries(
+        self, vector: np.ndarray, entries: list[ReferenceEntry], k: int
+    ) -> float:
         scored = sorted(
-            (entry.weight * similarity(vector, entry.vector) for entry in self.entries),
+            (entry.weight * similarity(vector, entry.vector) for entry in entries),
             reverse=True,
         )[:k]
         if not scored:
@@ -322,6 +349,25 @@ class ReferenceBank:
         # suppresses one lucky match against a noisy crop.
         rest = float(np.mean(scored[1:]))
         return float(max(0.0, min(1.0, 0.7 * best + 0.3 * rest)))
+
+    def score_raw(self, vector: np.ndarray | None, *, top_k: int | None = None) -> float:
+        """Trust-weighted top-k match in RAW cosine space (uncalibrated)."""
+        self.flush_pending()
+        if vector is None or vector.size == 0 or not self.entries:
+            return 0.0
+        k = max(1, top_k or settings.reference_top_k)
+        prototypes = self.prototypes() if settings.prototype_bank else []
+        if prototypes and len(prototypes) < len(self.entries):
+            proto_score = self._score_entries(vector, prototypes, k)
+            calib = calibrator()
+            gate = calib.threshold("rescue")
+            # Only ambiguous scores (close to the decision boundary) justify
+            # comparing against the whole bank.
+            if abs(calib.normalize(proto_score) - gate) > settings.prototype_ambiguous_margin:
+                self.prototype_hits += 1
+                return proto_score
+            self.full_bank_fallbacks += 1
+        return self._score_entries(vector, self.entries, k)
 
     def score(self, vector: np.ndarray | None, *, top_k: int | None = None) -> float:
         """Calibrated 0..1 appearance confidence (Phase 3F.1).
@@ -396,6 +442,11 @@ class ReferenceBank:
             "referenceMeanQuality": round(float(np.mean(qualities)), 3) if qualities else 0.0,
             "referenceRejectedLowQuality": self.rejected_low_quality,
             "referenceEvicted": self.evicted,
+            "prototypeBankEnabled": settings.prototype_bank,
+            "prototypeBankSize": len(self.prototypes()) if self.entries else 0,
+            "prototypeBankHits": self.prototype_hits,
+            "prototypeFullBankFallbacks": self.full_bank_fallbacks,
+            "prototypeBankRebuilds": self.prototype_rebuilds,
             "matchSimilarityMeanAccepted": round(float(np.mean(self.positive_scores)), 3)
             if self.positive_scores
             else 0.0,

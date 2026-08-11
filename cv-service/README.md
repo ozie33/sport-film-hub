@@ -297,3 +297,37 @@ Decoding is done by ffmpeg (`fps=<analysisFps>,scale=<width>:-2`), so the source
 walked frame by frame. Clip timestamps are always original-video timestamps.
 Logs report per-stage seconds, per-call milliseconds, GPU utilisation, frames
 decoded vs detected vs motion-tracked vs dead-time skipped, and analysed coverage.
+
+## Phase 3G — target recall + re-ID efficiency (cv-service-0.6.0)
+
+Two-stage re-identification, appearance caching and target hysteresis. No
+architectural change: the calibrated similarity system and the reference bank
+from 0.5.2 are preserved.
+
+* **Stage 1 shortlist** (`CV_REID_SHORTLIST`, `CV_REID_SHORTLIST_TOP_K=6`) ranks
+  detections with cheap signals only — proximity to the predicted target
+  position, motion continuity with active tracks, uniform affinity. Only the top
+  K uncached crops reach the ResNet on non-event frames.
+* **Embedding cache** (`CV_EMBED_CACHE`, `CV_EMBED_CACHE_SECONDS=1.6`,
+  `CV_EMBED_CACHE_MIN_IOU=0.62`) reuses a vector for the same spatial slot until
+  the box drifts, another person overlaps it (occlusion), the entry goes stale,
+  or detection confidence collapses.
+* **Prototype reference bank** (`CV_PROTOTYPE_BANK`, `CV_PROTOTYPE_COUNT=6`)
+  compares against one representative view per trust/pose bucket first and only
+  expands to the full bank when the score sits within
+  `CV_PROTOTYPE_AMBIGUOUS_MARGIN` of the decision gate.
+* **Context-aware rescue**: gates drop (bounded by
+  `CV_RESCUE_CONTEXT_BONUS_MAX`) for candidates near the predicted position,
+  with strong motion continuity, or with high uniform affinity, and rise by
+  `CV_RESCUE_FAR_PENALTY` beyond `CV_TARGET_RECALL_FAR_PX`.
+* **Target hysteresis**: the retain gate is discounted by
+  `CV_TARGET_HYSTERESIS_BONUS=0.05`, while switching needs a larger margin
+  (`0.24`) sustained over more frames (`4`).
+* **Candidate generation** keeps short but valid target segments
+  (`CV_CANDIDATE_MIN_SEGMENT=0.3`, `CV_CANDIDATE_GAP_LIMIT=3.5`).
+
+Only target-side rescue/re-acquisition gates were loosened; generic association
+and non-target matching are unchanged. New diagnostics live under
+`metrics.reidEfficiency`, `metrics.targetRecall.targetRescueDecisionsByContext`,
+`metrics.targetTrackChangeCauses` and the `prototype*` keys in
+`metrics.appearance`.

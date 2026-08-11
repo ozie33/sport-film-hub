@@ -3,10 +3,10 @@
 import os
 from dataclasses import dataclass
 
-SERVICE_VERSION = "cv-service-0.5.2"
+SERVICE_VERSION = "cv-service-0.6.0"
 PERSON_DETECTOR_VERSION = "yolov8n-coco-fp16-0.2"
-TRACKER_VERSION = "iou-proximity-stitch-tracker-0.5-targetrecall"
-REID_VERSION = "resnet18-embed+colorhist-referencebank-0.7.0-calibrated"
+TRACKER_VERSION = "iou-proximity-stitch-tracker-0.6-hysteresis"
+REID_VERSION = "resnet18-embed+colorhist-referencebank-0.8.0-twostage-calibrated"
 EMBEDDING_VERSION = "resnet18-imagenet-softcentered-flipavg-0.2"
 
 
@@ -66,8 +66,11 @@ class Settings:
     min_person_height_fraction: float = _f("CV_MIN_PERSON_HEIGHT", 0.05)
     # Target lock behaviour.
     target_lock_threshold: float = _f("CV_TARGET_LOCK_THRESHOLD", 0.45)
-    target_switch_margin: float = _f("CV_TARGET_SWITCH_MARGIN", 0.18)
-    target_switch_frames: int = _i("CV_TARGET_SWITCH_FRAMES", 3)
+    # Phase 3G hysteresis: switching away from the target costs more than staying.
+    target_switch_margin: float = _f("CV_TARGET_SWITCH_MARGIN", 0.24)
+    target_switch_frames: int = _i("CV_TARGET_SWITCH_FRAMES", 4)
+    # Retention discount applied to the retain gate for the CURRENT target only.
+    target_hysteresis_bonus: float = _f("CV_TARGET_HYSTERESIS_BONUS", 0.05)
     # --- Phase 3E: target recall / re-acquisition (target-only relaxations) ---
     target_recall: bool = os.environ.get("CV_TARGET_RECALL", "true") != "false"
     # Appearance agreement required to rescue a filtered detection as the target.
@@ -75,9 +78,17 @@ class Settings:
     # Lower bar when the candidate is close to the last known target position.
     target_recall_near_appearance: float = _f("CV_TARGET_RECALL_NEAR_APPEARANCE", 0.36)
     target_recall_near_px: float = _f("CV_TARGET_RECALL_NEAR_PX", 220.0)
+    # Beyond this distance a rescue must match strongly (context penalty).
+    target_recall_far_px: float = _f("CV_TARGET_RECALL_FAR_PX", 520.0)
+    # Phase 3G context-aware rescue adjustments (subtracted from the gate).
+    rescue_motion_bonus: float = _f("CV_RESCUE_MOTION_BONUS", 0.06)
+    rescue_uniform_bonus: float = _f("CV_RESCUE_UNIFORM_BONUS", 0.05)
+    rescue_uniform_min: float = _f("CV_RESCUE_UNIFORM_MIN", 0.62)
+    rescue_context_bonus_max: float = _f("CV_RESCUE_CONTEXT_BONUS_MAX", 0.10)
+    rescue_far_penalty: float = _f("CV_RESCUE_FAR_PENALTY", 0.08)
     # Smaller target boxes are allowed than generic players (240p sources).
     target_min_height_fraction: float = _f("CV_TARGET_MIN_HEIGHT", 0.018)
-    target_recall_max_per_frame: int = _i("CV_TARGET_RECALL_MAX_PER_FRAME", 2)
+    target_recall_max_per_frame: int = _i("CV_TARGET_RECALL_MAX_PER_FRAME", 3)
     target_court_confidence_penalty: float = _f("CV_TARGET_COURT_PENALTY", 0.85)
     # Retaining an established target is cheaper than re-acquiring it.
     # Phase 3F.1: these are FALLBACKS. When similarity calibration is on, the
@@ -88,6 +99,22 @@ class Settings:
     target_memory_seconds: float = _f("CV_TARGET_MEMORY_SECONDS", 3.0)
     confirmation_min_seconds: float = _f("CV_CONFIRMATION_MIN_SECONDS", 6.0)
     confirmation_max_requests: int = _i("CV_CONFIRMATION_MAX", 8)
+    # --- Phase 3G: two-stage re-ID + embedding cache ----------------------
+    # Stage 1 is a cheap motion/spatial/uniform shortlist; stage 2 embeds only
+    # the top candidates. Generic association still gets a signature (cached).
+    reid_shortlist: bool = os.environ.get("CV_REID_SHORTLIST", "true") != "false"
+    reid_shortlist_top_k: int = _i("CV_REID_SHORTLIST_TOP_K", 6)
+    embedding_cache: bool = os.environ.get("CV_EMBED_CACHE", "true") != "false"
+    embedding_cache_seconds: float = _f("CV_EMBED_CACHE_SECONDS", 1.6)
+    embedding_cache_min_iou: float = _f("CV_EMBED_CACHE_MIN_IOU", 0.62)
+    embedding_cache_max_entries: int = _i("CV_EMBED_CACHE_MAX", 64)
+    # Compact prototype bank: representative reference views tried first.
+    prototype_bank: bool = os.environ.get("CV_PROTOTYPE_BANK", "true") != "false"
+    prototype_count: int = _i("CV_PROTOTYPE_COUNT", 6)
+    prototype_ambiguous_margin: float = _f("CV_PROTOTYPE_AMBIGUOUS_MARGIN", 0.06)
+    # --- Phase 3G: candidate generation -----------------------------------
+    candidate_min_segment_seconds: float = _f("CV_CANDIDATE_MIN_SEGMENT", 0.3)
+    candidate_gap_limit_seconds: float = _f("CV_CANDIDATE_GAP_LIMIT", 3.5)
     # --- Phase 3F: learned appearance embedding ---------------------------
     # Primary appearance signal. "none" falls back to colour histograms only.
     embedder_backend: str = os.environ.get("CV_EMBEDDER", "resnet18")
@@ -197,6 +224,14 @@ def validate_settings(s: Settings = settings) -> list[str]:
         errors.append("CV_EMBED_HEIGHT/CV_EMBED_WIDTH are too small (min 64x32).")
     if s.reference_top_k < 1:
         errors.append("CV_REFERENCE_TOP_K must be at least 1.")
+    if s.reid_shortlist_top_k < 1:
+        errors.append("CV_REID_SHORTLIST_TOP_K must be at least 1.")
+    if s.prototype_count < 1:
+        errors.append("CV_PROTOTYPE_COUNT must be at least 1.")
+    if not 0 <= s.embedding_cache_min_iou <= 0.95:
+        errors.append("CV_EMBED_CACHE_MIN_IOU must be between 0 and 0.95.")
+    if s.candidate_min_segment_seconds <= 0:
+        errors.append("CV_CANDIDATE_MIN_SEGMENT must be greater than 0.")
     if s.embedder_backend == "none":
         warnings.append(
             "CV_EMBEDDER is 'none'; identity matching falls back to colour "
