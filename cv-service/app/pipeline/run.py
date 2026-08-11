@@ -460,10 +460,13 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
             frames_propagated += 1
             if not state.target_track_id:
                 return
+            found = False
             for track, box in propagated:
                 if track.track_id != state.target_track_id:
                     continue
                 target_frames += 1
+                found = True
+                state.remember_target(box, timestamp)
                 target_samples.append(
                     TargetSample(
                         timestamp=timestamp,
@@ -472,6 +475,34 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                         ball_distance=None,
                     )
                 )
+            if found:
+                return
+            # Short target-memory window: the target is not declared lost the
+            # instant it stops being propagated. Carry it with the last known
+            # motion for a few seconds at decayed confidence instead.
+            last_time = state.last_target_time
+            if last_time is None or state.last_target_box is None:
+                return
+            gap = timestamp - last_time
+            if gap <= 0 or gap > settings.target_memory_seconds:
+                return
+            target_track = next(
+                (t for t in tracker.tracks if t.track_id == state.target_track_id), None
+            )
+            predicted = target_track.predict(timestamp) if target_track else None
+            box = predicted or state.last_target_box
+            decay = max(0.3, 1.0 - gap / max(1e-6, settings.target_memory_seconds))
+            recall_stats.memory_frames += 1
+            target_frames += 1
+            target_samples.append(
+                TargetSample(
+                    timestamp=timestamp,
+                    box=box,
+                    identity_confidence=state.cached_scores.get(state.target_track_id, 0.0)
+                    * decay,
+                    ball_distance=None,
+                )
+            )
 
         # ------------------------------------------------------------- main loop
 
