@@ -47,8 +47,9 @@ from app.pipeline.reid import (
     region_means,
     signature,
 )
+from app.pipeline.target_recall import TargetRecallStats, recall_target_detections
 from app.pipeline.timing import StageTimer, gpu_stats
-from app.pipeline.tracker import MultiObjectTracker, stitch_tracks
+from app.pipeline.tracker import MultiObjectTracker, iou as box_iou, stitch_tracks
 
 log = get_logger("cv.pipeline")
 
@@ -183,6 +184,7 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
             scene_threshold=settings.dead_time_scene,
         )
         target_samples: list[TargetSample] = []
+        recall_stats = TargetRecallStats()
         ball_centres: dict[float, list[tuple[float, float]]] = {}
         identity_by_time: dict[float, float] = {}
         frame_width_hint = info.width or 1280
@@ -232,15 +234,16 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
             people = [d for d in detections if d.label == "person"]
             balls = [d for d in detections if d.label == "ball"]
             # Duplicate/overlapping person boxes fragment tracks: suppress first.
-            people, duplicates = suppress_duplicates(
+            people, duplicates, size_rejected = suppress_duplicates(
                 people,
                 settings.nms_iou_threshold,
                 settings.min_person_height_fraction,
                 frame.shape[0],
             )
             detections_deduplicated += duplicates
+            soft_rejected: list[tuple[object, str]] = [(d, "size") for d in size_rejected]
             if settings.court_filter:
-                people, dropped = filter_playing_area(
+                people, dropped, court_rejected = filter_playing_area(
                     people,
                     frame.shape[1],
                     frame.shape[0],
@@ -249,6 +252,36 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                     settings.court_max_height,
                 )
                 detections_dropped += dropped
+                soft_rejected.extend(court_rejected)
+
+            # Target recall: filtering is SOFT for the confirmed athlete only.
+            if settings.target_recall and soft_rejected:
+                with timer.stage("target_recall"):
+                    rescued = recall_target_detections(
+                        frame,
+                        soft_rejected,
+                        gallery,
+                        state.target_signature,
+                        state.last_target_box,
+                        appearance_threshold=settings.target_recall_appearance,
+                        near_appearance_threshold=settings.target_recall_near_appearance,
+                        near_radius_px=settings.target_recall_near_px,
+                        min_height_fraction=settings.target_min_height_fraction,
+                        max_per_frame=settings.target_recall_max_per_frame,
+                        court_confidence_penalty=settings.target_court_confidence_penalty,
+                        stats=recall_stats,
+                    )
+                if rescued:
+                    # Never let a rescue duplicate a box that already survived
+                    # filtering — duplicates are what fragmented tracks.
+                    rescued = [
+                        d
+                        for d in rescued
+                        if all(box_iou(d.box, k.box) < settings.nms_iou_threshold for k in people)
+                    ]
+                if rescued:
+                    people = people + rescued
+                    detections_dropped = max(0, detections_dropped - len(rescued))
             detections_total += len(people)
             if balls:
                 ball_frames += 1
@@ -371,6 +404,7 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                     timestamp,
                     job_settings.confirmationThreshold,
                     reid_track_ids=None if reid_all else event_ids,
+                    recall=recall_stats,
                 )
 
             if chosen is None:
@@ -434,10 +468,13 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
             frames_propagated += 1
             if not state.target_track_id:
                 return
+            found = False
             for track, box in propagated:
                 if track.track_id != state.target_track_id:
                     continue
                 target_frames += 1
+                found = True
+                state.remember_target(box, timestamp)
                 target_samples.append(
                     TargetSample(
                         timestamp=timestamp,
@@ -446,6 +483,34 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                         ball_distance=None,
                     )
                 )
+            if found:
+                return
+            # Short target-memory window: the target is not declared lost the
+            # instant it stops being propagated. Carry it with the last known
+            # motion for a few seconds at decayed confidence instead.
+            last_time = state.last_target_time
+            if last_time is None or state.last_target_box is None:
+                return
+            gap = timestamp - last_time
+            if gap <= 0 or gap > settings.target_memory_seconds:
+                return
+            target_track = next(
+                (t for t in tracker.tracks if t.track_id == state.target_track_id), None
+            )
+            predicted = target_track.predict(timestamp) if target_track else None
+            box = predicted or state.last_target_box
+            decay = max(0.3, 1.0 - gap / max(1e-6, settings.target_memory_seconds))
+            recall_stats.memory_frames += 1
+            target_frames += 1
+            target_samples.append(
+                TargetSample(
+                    timestamp=timestamp,
+                    box=box,
+                    identity_confidence=state.cached_scores.get(state.target_track_id, 0.0)
+                    * decay,
+                    ball_distance=None,
+                )
+            )
 
         # ------------------------------------------------------------- main loop
 
@@ -591,6 +656,7 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
             target_frames,
             state.target_track_id,
         )
+        log.info("target recall job=%s %s", request.jobId, recall_stats.payload())
         progress("generating_candidates", "Finding player involvement", 90)
 
         # ------------------------------------------------- tracklet stitching
@@ -709,7 +775,9 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                 job_settings.preRoll,
                 job_settings.postRoll,
                 duration or 0.0,
-                max(0.35, job_settings.identityMediumThreshold * 0.8),
+                # Target-biased retention: clips are kept at the target retain
+                # threshold, not the stricter generic identity threshold.
+                max(settings.target_retain_threshold, job_settings.identityMediumThreshold * 0.6),
             )
         for candidate in candidates:
             candidate["trackId"] = state.target_track_id or (
@@ -806,7 +874,16 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                     "targetSwitchMargin": settings.target_switch_margin,
                     "nmsIouThreshold": settings.nms_iou_threshold,
                     "minPersonHeightFraction": settings.min_person_height_fraction,
+                    "targetRecallEnabled": settings.target_recall,
+                    "targetMinHeightFraction": settings.target_min_height_fraction,
+                    "targetRetainThreshold": settings.target_retain_threshold,
+                    "targetReacquireThreshold": settings.target_reacquire_threshold,
+                    "targetRecallAppearance": settings.target_recall_appearance,
+                    "targetRecallNearAppearance": settings.target_recall_near_appearance,
+                    "targetRecallNearPx": settings.target_recall_near_px,
+                    "targetMemorySeconds": settings.target_memory_seconds,
                 },
+                "targetRecall": recall_stats.payload(),
                 "framesWithTarget": target_frames,
                 "targetTrackingCoverage": coverage,
                 "targetVisibleSeconds": round(analyzed_span, 2),
