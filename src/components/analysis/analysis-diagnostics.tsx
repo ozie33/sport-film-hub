@@ -166,6 +166,27 @@ export function AnalysisDiagnostics({
         </dl>
       )}
 
+      {appearanceEntries.length > 0 ? (
+        <div className="mt-4">
+          <p className="label-caps mb-2 text-[10px] text-muted-foreground">
+            Appearance &amp; re-identification
+          </p>
+          <dl className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {appearanceEntries.map(([key, label]) => (
+              <div
+                key={key}
+                className="rounded-lg border border-border bg-surface-2 px-3 py-2"
+              >
+                <dt className="label-caps text-[10px] text-muted-foreground">{label}</dt>
+                <dd className="text-sm font-semibold tabular-nums break-words">
+                  {formatValue(key, appearance?.[key])}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      ) : null}
+
       {versions || frames.length > 0 ? (
         <div className="mt-3">
           <Button variant="outline" size="sm" onClick={() => setOpen((value) => !value)}>
