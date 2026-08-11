@@ -88,6 +88,11 @@ class IdentityState:
         self.switches += 1
         self.switch_causes[cause] = self.switch_causes.get(cause, 0) + 1
 
+    def note_cause(self, cause: str) -> None:
+        """Record a target-track change that is NOT an identity switch
+        (re-acquiring the same athlete under a fresh track id)."""
+        self.switch_causes[cause] = self.switch_causes.get(cause, 0) + 1
+
     def record(self, track_id: str, score: float) -> None:
         self.per_track_scores.setdefault(track_id, []).append(score)
 
@@ -301,7 +306,7 @@ def choose_target(
             calib.note_decision("reacquire", accepted)
             if accepted:
                 if state.target_track_id != candidate[0].track_id:
-                    state.note_switch("reacquisition")
+                    state.note_cause("reacquisition_same_athlete")
                 state.target_track_id = candidate[0].track_id
                 state.target_signature = candidate[0].mean_signature
                 state.locked = True
