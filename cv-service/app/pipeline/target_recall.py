@@ -16,7 +16,12 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from app.pipeline.calibration import calibrator
-from app.pipeline.reid import ReferenceGallery, signatures_batch, similarity
+from app.pipeline.reid import (
+    ReferenceGallery,
+    signatures_batch,
+    similarity,
+    uniform_affinity,
+)
 
 
 @dataclass
@@ -33,6 +38,8 @@ class TargetRecallStats:
     failed_reacquisitions: int = 0
     memory_frames: int = 0
     soft_confidence_penalties: int = 0
+    # Phase 3G: rescue decisions broken down by the context that set the gate.
+    context_decisions: dict[str, dict[str, int]] = field(default_factory=dict)
     appearance_scores: list[float] = field(default_factory=list)
     raw_appearance_scores: list[float] = field(default_factory=list)
 
@@ -45,6 +52,10 @@ class TargetRecallStats:
             self.appearance_scores.append(round(float(value), 3))
         if raw is not None and len(self.raw_appearance_scores) < 20000:
             self.raw_appearance_scores.append(round(float(raw), 3))
+
+    def note_context(self, context: str, accepted: bool) -> None:
+        bucket = self.context_decisions.setdefault(context, {"accepted": 0, "rejected": 0})
+        bucket["accepted" if accepted else "rejected"] += 1
 
     def payload(self) -> dict:
         scores = self.appearance_scores
@@ -63,6 +74,9 @@ class TargetRecallStats:
             "targetSuccessfulReacquisitions": self.reacquisitions,
             "targetFailedReacquisitions": self.failed_reacquisitions,
             "targetMemoryFrames": self.memory_frames,
+            "targetRescueDecisionsByContext": {
+                key: dict(value) for key, value in sorted(self.context_decisions.items())
+            },
             "targetRescueAppearanceMean": round(float(np.mean(scores)), 3) if scores else 0.0,
             "targetRescueAppearanceMeanRaw": round(float(np.mean(raw_scores)), 3)
             if raw_scores
@@ -88,13 +102,23 @@ def recall_target_detections(
     max_per_frame: int,
     court_confidence_penalty: float,
     stats: TargetRecallStats,
+    predicted_target_box: tuple[float, float, float, float] | None = None,
+    far_radius_px: float | None = None,
+    uniform_primary: np.ndarray | None = None,
+    uniform_secondary: np.ndarray | None = None,
+    motion_bonus: float = 0.0,
+    uniform_bonus: float = 0.0,
+    uniform_min: float = 0.62,
+    context_bonus_max: float = 0.10,
+    far_penalty: float = 0.0,
 ) -> list[object]:
     """Return detections that were filtered out but plausibly ARE the target.
 
-    Search order is nearest-first: candidates close to the last known target
-    position only need moderate appearance agreement, while distant candidates
-    must match strongly. That keeps precision while dramatically raising recall
-    on low-resolution film where the athlete's box is small and washed out.
+    Phase 3G makes the gate context-aware. Candidates near the PREDICTED target
+    position, candidates that continue the target's motion, and candidates whose
+    torso colour matches the team uniform get a bounded discount; candidates far
+    from any plausible target position must match more strongly than before.
+    Nothing here touches generic (non-target) association or filtering.
     """
     if not rejected or not (gallery.has_confirmed or target_signature is not None):
         return []
@@ -106,6 +130,8 @@ def recall_target_detections(
         appearance_threshold = calib.threshold("rescue")
         near_appearance_threshold = calib.threshold("rescue_near")
     scored: list[tuple[float, float, object, str]] = []
+    reference_box = predicted_target_box or last_target_box
+    far_radius = far_radius_px if far_radius_px is not None else near_radius_px * 2.5
 
     # Phase 3F: one batched embedding pass for all candidates instead of one
     # forward pass per crop — the learned appearance model is the expensive part.
@@ -139,15 +165,39 @@ def recall_target_detections(
         stats.note_appearance(appearance, raw_appearance)
 
         distance = float("inf")
-        if last_target_box is not None:
-            lx, ly = _centre(last_target_box)
+        if reference_box is not None:
+            lx, ly = _centre(reference_box)
             cx, cy = _centre(box)
             distance = float(np.hypot(cx - lx, cy - ly))
 
         near = distance <= near_radius_px
+        far = distance > far_radius
         needed = near_appearance_threshold if near else appearance_threshold
+        context = "near_predicted" if near else "mid_range"
+
+        discount = 0.0
+        # Motion continuity: the candidate sits where the target was heading.
+        if predicted_target_box is not None and distance <= far_radius:
+            motion_agreement = max(0.0, 1.0 - distance / max(1e-6, far_radius))
+            if motion_agreement >= 0.5:
+                discount += motion_bonus * motion_agreement
+                context = "motion_continuity" if not near else context
+        # Team/uniform affinity as a secondary context signal.
+        if uniform_primary is not None or uniform_secondary is not None:
+            affinity = uniform_affinity(frame, box, uniform_primary, uniform_secondary)
+            if affinity >= uniform_min:
+                discount += uniform_bonus
+                if context == "mid_range":
+                    context = "uniform_affinity"
+        needed = max(0.05, needed - min(context_bonus_max, discount))
+        if far:
+            # Distant candidates are the identity-swap risk: require MORE.
+            needed += far_penalty
+            context = "far"
+
         accepted = appearance >= needed
         calib.note_decision("rescue_near" if near else "rescue", accepted)
+        stats.note_context(context, accepted)
         if not accepted:
             stats.rejected_by_appearance += 1
             gallery.note_rejected(raw_appearance)
