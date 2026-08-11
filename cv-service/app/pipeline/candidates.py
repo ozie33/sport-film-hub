@@ -30,9 +30,12 @@ def build_candidates(
     duration: float,
     min_confidence: float,
     gap_limit: float = 2.5,
+    min_segment_seconds: float = 0.6,
 ) -> list[dict]:
     """Group consecutive high-involvement samples into candidate windows."""
-    if len(samples) < 3:
+    # Phase 3G: short but valid target segments are real involvement on 240p
+    # film, so two samples are enough to form a candidate window.
+    if len(samples) < 2:
         return []
 
     speeds: list[float] = [0.0]
@@ -75,7 +78,7 @@ def build_candidates(
             return
         first = samples[current[0][0]]
         last = samples[current[-1][0]]
-        if last.timestamp - first.timestamp < 0.6:
+        if last.timestamp - first.timestamp < max(0.0, min_segment_seconds):
             return
         scores = [item[1] for item in current]
         reasons = [item[2] for item in current]
