@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from app.config import settings
+from app.pipeline.calibration import calibrator
 from app.pipeline.reid import ReferenceGallery, similarity, uniform_affinity
 from app.pipeline.target_recall import TargetRecallStats
 from app.pipeline.tracker import Track, iou
@@ -122,11 +123,19 @@ def score_track(
     uniform_secondary,
     jersey_hint: float,
 ) -> float:
-    """Combined identity score for one candidate track at one timestamp."""
-    reference_score = gallery.score(signature)
-    continuity = (
+    """Combined identity score for one candidate track at one timestamp.
+
+    Phase 3F.1: both appearance signals are normalised into a calibrated 0..1
+    range BEFORE blending with the uniform/jersey signals, so the weighted sum
+    is meaningful regardless of the embedding's native similarity scale.
+    """
+    calib = calibrator()
+    raw_reference = gallery.score_raw(signature)
+    reference_score = calib.normalize(raw_reference)
+    raw_continuity = (
         similarity(state.target_signature, signature) if state.target_signature is not None else 0.0
     )
+    continuity = calib.normalize(raw_continuity) if raw_continuity > 0.0 else 0.0
     same_track = 1.0 if track.track_id == state.target_track_id else 0.0
     colour = uniform_affinity(frame, box, uniform_primary, uniform_secondary)
 
@@ -164,7 +173,11 @@ def score_track(
         }
     )
     if track.track_id == state.target_track_id:
-        gallery.note_positive(reference_score)
+        # Feed the calibrator RAW similarity from the track we believe is the
+        # athlete; that is the positive distribution the gates are derived from.
+        gallery.note_positive(raw_reference)
+    elif raw_reference > 0.0:
+        gallery.note_rejected(raw_reference)
     return float(max(0.0, min(1.0, score)))
 
 
@@ -196,10 +209,17 @@ def choose_target(
     locked_target = next(
         (item for item in observations if item[0].track_id == target_id), None
     )
+    calib = calibrator()
+    lock_threshold = (
+        calib.threshold("lock") if calib.enabled else settings.target_lock_threshold
+    )
+    reacquire_threshold = (
+        calib.threshold("reacquire") if calib.enabled else settings.target_reacquire_threshold
+    )
     retain_threshold = (
-        settings.target_retain_threshold
+        (calib.threshold("retain") if calib.enabled else settings.target_retain_threshold)
         if gallery.has_confirmed
-        else settings.target_lock_threshold
+        else lock_threshold
     )
 
     # Target lock: while the selected athlete is still tracked and plausible, do
@@ -215,7 +235,9 @@ def choose_target(
             score = state.cached_scores.get(track.track_id, 0.0)
         # A temporary low-confidence detection must not break the lock: the
         # target only needs to clear the (lower) retain threshold.
-        if score >= min(settings.target_lock_threshold, retain_threshold):
+        retained = score >= min(lock_threshold, retain_threshold)
+        calib.note_decision("retain", retained)
+        if retained:
             state.record(track.track_id, score)
             state._low_open = False
             state._low_since = None
@@ -267,7 +289,9 @@ def choose_target(
             if not bucket:
                 continue
             candidate = max(bucket, key=lambda item: item[1])
-            if candidate[1] >= settings.target_reacquire_threshold:
+            accepted = candidate[1] >= reacquire_threshold
+            calib.note_decision("reacquire", accepted)
+            if accepted:
                 state.target_track_id = candidate[0].track_id
                 state.target_signature = candidate[0].mean_signature
                 state.locked = True
@@ -345,7 +369,7 @@ def choose_target(
     state.target_track_id = best_track.track_id
     state.target_signature = best_track.mean_signature
     state.remember_target(scored[0][2], timestamp)
-    if best_score >= max(settings.target_lock_threshold, confirmation_threshold):
+    if best_score >= max(lock_threshold, confirmation_threshold):
         if not state.locked:
             state.lock_time = timestamp
         state.locked = True
