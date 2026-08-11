@@ -3,10 +3,10 @@
 import os
 from dataclasses import dataclass
 
-SERVICE_VERSION = "cv-service-0.3.1"
+SERVICE_VERSION = "cv-service-0.4.0"
 PERSON_DETECTOR_VERSION = "yolov8n-coco-fp16-0.2"
-TRACKER_VERSION = "iou-proximity-stitch-tracker-0.4"
-REID_VERSION = "colorhist-torso-embed-targetlock-0.4"
+TRACKER_VERSION = "iou-proximity-stitch-tracker-0.5-targetrecall"
+REID_VERSION = "colorhist-torso-embed-targetlock-0.5-targetrecall"
 
 
 def _f(key: str, default: float) -> float:
@@ -67,6 +67,22 @@ class Settings:
     target_lock_threshold: float = _f("CV_TARGET_LOCK_THRESHOLD", 0.45)
     target_switch_margin: float = _f("CV_TARGET_SWITCH_MARGIN", 0.18)
     target_switch_frames: int = _i("CV_TARGET_SWITCH_FRAMES", 3)
+    # --- Phase 3E: target recall / re-acquisition (target-only relaxations) ---
+    target_recall: bool = os.environ.get("CV_TARGET_RECALL", "true") != "false"
+    # Appearance agreement required to rescue a filtered detection as the target.
+    target_recall_appearance: float = _f("CV_TARGET_RECALL_APPEARANCE", 0.50)
+    # Lower bar when the candidate is close to the last known target position.
+    target_recall_near_appearance: float = _f("CV_TARGET_RECALL_NEAR_APPEARANCE", 0.36)
+    target_recall_near_px: float = _f("CV_TARGET_RECALL_NEAR_PX", 220.0)
+    # Smaller target boxes are allowed than generic players (240p sources).
+    target_min_height_fraction: float = _f("CV_TARGET_MIN_HEIGHT", 0.018)
+    target_recall_max_per_frame: int = _i("CV_TARGET_RECALL_MAX_PER_FRAME", 2)
+    target_court_confidence_penalty: float = _f("CV_TARGET_COURT_PENALTY", 0.85)
+    # Retaining an established target is cheaper than re-acquiring it.
+    target_retain_threshold: float = _f("CV_TARGET_RETAIN_THRESHOLD", 0.30)
+    target_reacquire_threshold: float = _f("CV_TARGET_REACQUIRE_THRESHOLD", 0.34)
+    # Short target memory: predicted motion carries the target through gaps.
+    target_memory_seconds: float = _f("CV_TARGET_MEMORY_SECONDS", 3.0)
     confirmation_min_seconds: float = _f("CV_CONFIRMATION_MIN_SECONDS", 6.0)
     confirmation_max_requests: int = _i("CV_CONFIRMATION_MAX", 8)
     # Playing-area filtering.
