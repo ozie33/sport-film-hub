@@ -51,6 +51,11 @@ from app.pipeline.reid import (
 )
 from app.pipeline.embedder import embedder
 from app.pipeline.calibration import reset_calibrator
+from app.pipeline.efficiency import (
+    EmbeddingCache,
+    ReidEfficiencyStats,
+    shortlist_score,
+)
 from app.pipeline.target_recall import TargetRecallStats, recall_target_detections
 from app.pipeline.timing import StageTimer, gpu_stats
 from app.pipeline.tracker import MultiObjectTracker, iou as box_iou, stitch_tracks
@@ -206,6 +211,13 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
         )
         target_samples: list[TargetSample] = []
         recall_stats = TargetRecallStats()
+        reid_stats = ReidEfficiencyStats()
+        embed_cache = EmbeddingCache(
+            ttl_seconds=settings.embedding_cache_seconds if settings.embedding_cache else 0.0,
+            min_iou=settings.embedding_cache_min_iou,
+            max_entries=settings.embedding_cache_max_entries,
+            stats=reid_stats,
+        )
         ball_centres: dict[float, list[tuple[float, float]]] = {}
         identity_by_time: dict[float, float] = {}
         frame_width_hint = info.width or 1280
@@ -278,6 +290,16 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                 detections_dropped += dropped
                 soft_rejected.extend(court_rejected)
 
+            predicted_target = None
+            if state.target_track_id:
+                target_track = next(
+                    (t for t in tracker.tracks if t.track_id == state.target_track_id), None
+                )
+                if target_track is not None:
+                    predicted_target = target_track.predict(timestamp)
+            if predicted_target is None:
+                predicted_target = state.last_target_box
+
             # Target recall: filtering is SOFT for the confirmed athlete only.
             if settings.target_recall and soft_rejected:
                 with timer.stage("target_recall"):
@@ -294,6 +316,15 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                         max_per_frame=settings.target_recall_max_per_frame,
                         court_confidence_penalty=settings.target_court_confidence_penalty,
                         stats=recall_stats,
+                        predicted_target_box=predicted_target,
+                        far_radius_px=settings.target_recall_far_px,
+                        uniform_primary=uniform_primary,
+                        uniform_secondary=uniform_secondary,
+                        motion_bonus=settings.rescue_motion_bonus,
+                        uniform_bonus=settings.rescue_uniform_bonus,
+                        uniform_min=settings.rescue_uniform_min,
+                        context_bonus_max=settings.rescue_context_bonus_max,
+                        far_penalty=settings.rescue_far_penalty,
                     )
                 if rescued:
                     # Never let a rescue duplicate a box that already survived
@@ -327,22 +358,65 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                 pending_confirmations
                 and pending_confirmations[0].timestamp <= timestamp + (1.0 / analysis_fps)
             )
-            # Appearance signatures are also the association signal, so they are
-            # always computed on detection frames — cheap relative to the
-            # fragmentation they prevent.
-            want_signatures = True
             previous_person_count = len(people)
             _ = count_changed
+            full_pass = bool(
+                cadence_due or target_missing or low_confidence or confirmation_due
+            )
 
-            # One signature per detection, computed at most once and reused.
+            # Phase 3G two-stage appearance: cheap shortlist, cached embeddings,
+            # then one batched embedding pass for whatever is left.
             with timer.stage("signature"):
-                if want_signatures:
-                    signatures: list[np.ndarray | None] = list(
-                        signatures_batch(frame, [detection.box for detection in people])
-                    )
-                    signature_computations += len(people)
+                boxes = [detection.box for detection in people]
+                reid_stats.detections_seen += len(boxes)
+                if full_pass:
+                    reid_stats.full_passes += 1
                 else:
-                    signatures = [None] * len(people)
+                    reid_stats.shortlist_passes += 1
+                embed_cache.prune(timestamp)
+                signatures: list[np.ndarray | None] = [None] * len(boxes)
+                for index, box in enumerate(boxes):
+                    signatures[index] = embed_cache.lookup(
+                        box,
+                        timestamp,
+                        others=boxes,
+                        confidence=people[index].confidence,
+                        strict=full_pass,
+                    )
+                todo = [index for index, sig in enumerate(signatures) if sig is None]
+                if (
+                    settings.reid_shortlist
+                    and not full_pass
+                    and len(todo) > settings.reid_shortlist_top_k
+                ):
+                    predictions = [
+                        predicted
+                        for predicted in (
+                            track.predict(timestamp) for track in tracker.active
+                        )
+                        if predicted is not None
+                    ]
+                    ranked = sorted(
+                        todo,
+                        key=lambda index: shortlist_score(
+                            boxes[index],
+                            predicted_target=predicted_target,
+                            track_predictions=predictions,
+                            uniform=0.5,
+                        ),
+                        reverse=True,
+                    )
+                    kept = ranked[: settings.reid_shortlist_top_k]
+                    reid_stats.shortlist_skipped += len(ranked) - len(kept)
+                    todo = sorted(kept)
+                reid_stats.shortlisted += len(todo)
+                if todo:
+                    computed = signatures_batch(frame, [boxes[index] for index in todo])
+                    for index, sig in zip(todo, computed):
+                        signatures[index] = sig
+                        embed_cache.store(boxes[index], timestamp, sig)
+                    signature_computations += len(todo)
+                    reid_stats.embeddings_computed += len(todo)
 
             with timer.stage("track"):
                 updated = tracker.update(
@@ -371,14 +445,25 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                 state.note_reid("new_or_reappeared_track")
 
             need_signatures_now = bool(event_ids) or reid_all
-            if need_signatures_now and not want_signatures:
+            missing_now = [
+                index for index, sig in enumerate(signatures) if sig is None
+            ]
+            if need_signatures_now and missing_now:
+                # An event needs full evidence: embed the crops the shortlist
+                # skipped, then attach them to their freshly updated tracks.
                 with timer.stage("signature"):
-                    signatures = list(
-                        signatures_batch(frame, [detection.box for detection in people])
-                    )
-                    signature_computations += len(people)
-                for (track, _box), sig in zip(updated, signatures):
-                    if sig is not None and sig.size:
+                    computed = signatures_batch(frame, [boxes[index] for index in missing_now])
+                    for index, sig in zip(missing_now, computed):
+                        signatures[index] = sig
+                        embed_cache.store(boxes[index], timestamp, sig)
+                    signature_computations += len(missing_now)
+                    reid_stats.embeddings_computed += len(missing_now)
+                for index in missing_now:
+                    if index >= len(updated):
+                        continue
+                    track, _box = updated[index]
+                    sig = signatures[index]
+                    if sig is not None and getattr(sig, "size", 0):
                         track.signatures.append(sig)
 
             observations = [
