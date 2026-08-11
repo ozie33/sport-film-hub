@@ -648,6 +648,7 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
             target_frames,
             state.target_track_id,
         )
+        log.info("target recall job=%s %s", request.jobId, recall_stats.payload())
         progress("generating_candidates", "Finding player involvement", 90)
 
         # ------------------------------------------------- tracklet stitching
