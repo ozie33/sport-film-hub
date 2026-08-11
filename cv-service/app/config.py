@@ -3,10 +3,11 @@
 import os
 from dataclasses import dataclass
 
-SERVICE_VERSION = "cv-service-0.4.0"
+SERVICE_VERSION = "cv-service-0.5.0"
 PERSON_DETECTOR_VERSION = "yolov8n-coco-fp16-0.2"
 TRACKER_VERSION = "iou-proximity-stitch-tracker-0.5-targetrecall"
-REID_VERSION = "colorhist-torso-embed-targetlock-0.5-targetrecall"
+REID_VERSION = "resnet18-embed+colorhist-referencebank-0.6-appearance"
+EMBEDDING_VERSION = "resnet18-imagenet-centered-flipavg-0.1"
 
 
 def _f(key: str, default: float) -> float:
@@ -85,6 +86,27 @@ class Settings:
     target_memory_seconds: float = _f("CV_TARGET_MEMORY_SECONDS", 3.0)
     confirmation_min_seconds: float = _f("CV_CONFIRMATION_MIN_SECONDS", 6.0)
     confirmation_max_requests: int = _i("CV_CONFIRMATION_MAX", 8)
+    # --- Phase 3F: learned appearance embedding ---------------------------
+    # Primary appearance signal. "none" falls back to colour histograms only.
+    embedder_backend: str = os.environ.get("CV_EMBEDDER", "resnet18")
+    embed_weight: float = _f("CV_EMBED_WEIGHT", 0.75)
+    embed_width: int = _i("CV_EMBED_WIDTH", 128)
+    embed_height: int = _i("CV_EMBED_HEIGHT", 256)
+    embed_batch_size: int = _i("CV_EMBED_BATCH", 64)
+    embed_flip_average: bool = os.environ.get("CV_EMBED_FLIP", "true") != "false"
+    embed_center: bool = os.environ.get("CV_EMBED_CENTER", "true") != "false"
+    embed_mean_momentum: float = _f("CV_EMBED_MEAN_MOMENTUM", 0.02)
+    # Reference bank (multi-view, quality scored).
+    reference_top_k: int = _i("CV_REFERENCE_TOP_K", 3)
+    reference_min_quality: float = _f("CV_REFERENCE_MIN_QUALITY", 0.34)
+    reference_max_per_pose: int = _i("CV_REFERENCE_MAX_PER_POSE", 4)
+    reference_max_confirmed: int = _i("CV_REFERENCE_MAX_CONFIRMED", 48)
+    reference_max_library: int = _i("CV_REFERENCE_MAX_LIBRARY", 24)
+    # Automatic in-game reference collection while locked on the target.
+    auto_reference_collect: bool = os.environ.get("CV_AUTO_REFERENCE", "true") != "false"
+    auto_reference_min_score: float = _f("CV_AUTO_REFERENCE_MIN_SCORE", 0.55)
+    auto_reference_min_quality: float = _f("CV_AUTO_REFERENCE_MIN_QUALITY", 0.45)
+    auto_reference_interval_seconds: float = _f("CV_AUTO_REFERENCE_INTERVAL", 12.0)
     # Playing-area filtering.
     court_filter: bool = os.environ.get("CV_COURT_FILTER", "true") != "false"
     court_top_exclude: float = _f("CV_COURT_TOP_EXCLUDE", 0.18)
@@ -152,6 +174,17 @@ def validate_settings(s: Settings = settings) -> list[str]:
         errors.append("CV_BATCH_SIZE must be at least 1.")
     if s.detect_every < 1:
         errors.append("CV_DETECT_EVERY must be at least 1.")
+    if not 0 <= s.embed_weight <= 0.95:
+        errors.append("CV_EMBED_WEIGHT must be between 0 and 0.95.")
+    if s.embed_height < 64 or s.embed_width < 32:
+        errors.append("CV_EMBED_HEIGHT/CV_EMBED_WIDTH are too small (min 64x32).")
+    if s.reference_top_k < 1:
+        errors.append("CV_REFERENCE_TOP_K must be at least 1.")
+    if s.embedder_backend == "none":
+        warnings.append(
+            "CV_EMBEDDER is 'none'; identity matching falls back to colour "
+            "histograms, which are weak on low-resolution film."
+        )
     if s.job_budget_seconds < 60:
         errors.append("CV_JOB_BUDGET_SECONDS must be at least 60.")
     if s.max_frames:

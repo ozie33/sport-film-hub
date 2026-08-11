@@ -43,10 +43,13 @@ from app.pipeline.identify import (
 from app.pipeline.reid import (
     ReferenceGallery,
     bgr_to_hex,
+    crop_quality,
     hex_to_bgr,
     region_means,
     signature,
+    signatures_batch,
 )
+from app.pipeline.embedder import embedder
 from app.pipeline.target_recall import TargetRecallStats, recall_target_detections
 from app.pipeline.timing import StageTimer, gpu_stats
 from app.pipeline.tracker import MultiObjectTracker, iou as box_iou, stitch_tracks
@@ -67,7 +70,7 @@ Progress = Callable[[str, str, int], None]
 
 
 def _load_reference_signatures(references) -> ReferenceGallery:
-    """Fetch authorized reference images and turn them into appearance vectors."""
+    """Fetch authorized reference images into a quality-scored reference bank."""
     gallery = ReferenceGallery()
     for reference in references:
         if reference.kind == "reference_video":
@@ -80,7 +83,14 @@ def _load_reference_signatures(references) -> ReferenceGallery:
             if image is None:
                 continue
             height, width = image.shape[:2]
-            gallery.add(signature(image, (0, 0, width, height)), reference.trust)
+            box = (0, 0, width, height)
+            quality = crop_quality(image, box)
+            gallery.add_image(
+                image,
+                reference.trust,
+                quality=quality,
+                pose=f"library:{quality.pose}",
+            )
         except Exception:  # noqa: BLE001
             # A single unreachable reference must not fail the whole job.
             continue
@@ -136,9 +146,9 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
         with timer.stage("references"):
             gallery = _load_reference_signatures(request.references)
         log.info(
-            "reference media loaded job=%s images=%d confirmed=%d",
+            "reference media queued job=%s images=%d confirmed=%d",
             request.jobId,
-            len(gallery.high) + len(gallery.medium) + len(gallery.low),
+            len(gallery.entries) + len(gallery.pending),
             len(gallery.high),
         )
 
@@ -201,6 +211,8 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
         target_frames = 0
         confirmation_matches = 0
         signature_computations = 0
+        auto_references_added = 0
+        last_auto_reference = -1e9
         last_timestamp = 0.0
         last_reid_time = -1e9
         previous_person_count = -1
@@ -230,6 +242,7 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
             nonlocal detections_total, detections_dropped, ball_frames, target_frames
             nonlocal confirmation_matches, signature_computations, previous_person_count
             nonlocal last_reid_time, uniform_primary, uniform_secondary, detections_deduplicated
+            nonlocal auto_references_added, last_auto_reference
 
             people = [d for d in detections if d.label == "person"]
             balls = [d for d in detections if d.label == "ball"]
@@ -312,13 +325,13 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
 
             # One signature per detection, computed at most once and reused.
             with timer.stage("signature"):
-                signatures: list[np.ndarray | None] = []
-                for detection in people:
-                    if want_signatures:
-                        signatures.append(signature(frame, detection.box))
-                        signature_computations += 1
-                    else:
-                        signatures.append(None)
+                if want_signatures:
+                    signatures: list[np.ndarray | None] = list(
+                        signatures_batch(frame, [detection.box for detection in people])
+                    )
+                    signature_computations += len(people)
+                else:
+                    signatures = [None] * len(people)
 
             with timer.stage("track"):
                 updated = tracker.update(
@@ -349,7 +362,9 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
             need_signatures_now = bool(event_ids) or reid_all
             if need_signatures_now and not want_signatures:
                 with timer.stage("signature"):
-                    signatures = [signature(frame, detection.box) for detection in people]
+                    signatures = list(
+                        signatures_batch(frame, [detection.box for detection in people])
+                    )
                     signature_computations += len(people)
                 for (track, _box), sig in zip(updated, signatures):
                     if sig is not None and sig.size:
@@ -377,7 +392,14 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                     )
                     if matched is not None:
                         track, sig = matched
-                        gallery.add(sig, "high")
+                        confirmed_quality = crop_quality(frame, target_box)
+                        gallery.add(
+                            sig,
+                            "high",
+                            quality=confirmed_quality,
+                            pose=confirmed_quality.pose,
+                            timestamp=timestamp,
+                        )
                         state.target_track_id = track.track_id
                         state.target_signature = sig
                         state.locked = True
@@ -434,6 +456,30 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                 )
             )
             identity_by_time[round(timestamp, 3)] = score
+
+            # Automatic in-game reference collection: while the target is locked
+            # with strong evidence, harvest sharp, well-framed crops so later
+            # occlusions and angle changes have same-game views to match against.
+            if (
+                settings.auto_reference_collect
+                and gallery.has_confirmed
+                and score >= settings.auto_reference_min_score
+                and timestamp - last_auto_reference >= settings.auto_reference_interval_seconds
+            ):
+                quality = crop_quality(frame, box)
+                if quality.score >= settings.auto_reference_min_quality:
+                    harvested = signature(frame, box)
+                    if gallery.add(
+                        harvested,
+                        "auto",
+                        quality=quality,
+                        pose=quality.pose,
+                        timestamp=timestamp,
+                        min_quality=settings.auto_reference_min_quality,
+                    ):
+                        auto_references_added += 1
+                        last_auto_reference = timestamp
+
             if len(debug_frames) < settings.debug_frames and frames_detected % 40 == 0:
                 image = _encode_debug_frame(frame, box, f"{track.track_id} {score:.2f}")
                 if image:
@@ -884,6 +930,16 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                     "targetMemorySeconds": settings.target_memory_seconds,
                 },
                 "targetRecall": recall_stats.payload(),
+                "appearance": {
+                    **embedder().stats(),
+                    **gallery.payload(),
+                    **state.signal_report(),
+                    "embeddingWeight": settings.embed_weight,
+                    "colourWeight": round(1.0 - settings.embed_weight, 3),
+                    "referenceTopK": settings.reference_top_k,
+                    "autoReferencesCollected": auto_references_added,
+                    "autoReferenceCollection": settings.auto_reference_collect,
+                },
                 "framesWithTarget": target_frames,
                 "targetTrackingCoverage": coverage,
                 "targetVisibleSeconds": round(analyzed_span, 2),
@@ -892,8 +948,8 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                 "confirmationsRequested": len(state.needs_confirmation),
                 "confirmationsSupplied": len(confirmations),
                 "confirmationsMatched": confirmation_matches,
-                "referenceImagesUsed": len(gallery.high) + len(gallery.medium) + len(gallery.low),
-                "confirmedReferencesUsed": len(gallery.high),
+                "referenceImagesUsed": len(gallery.entries),
+                "confirmedReferencesUsed": len(gallery.high) + len(gallery.auto),
                 "ballDetectedFrames": ball_frames,
                 "meanIdentityConfidence": round(float(np.mean(identity_scores)), 3)
                 if identity_scores

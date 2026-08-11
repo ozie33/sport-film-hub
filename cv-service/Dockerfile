@@ -4,7 +4,7 @@
 FROM python:3.11-slim
 
 # Build metadata (supplied by CI; harmless defaults for local builds).
-ARG SERVICE_VERSION=cv-service-0.4.0
+ARG SERVICE_VERSION=cv-service-0.5.0
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
 LABEL org.opencontainers.image.title="Player Analysis CV Service" \
@@ -40,6 +40,16 @@ ENV PYTHONUNBUFFERED=1 \
     CV_YOLO_WEIGHTS=/models/yolov8n.pt \
     CV_DETECTOR=yolo \
     CV_FP16=true \
+    CV_EMBEDDER=resnet18 \
+    CV_EMBED_WEIGHT=0.75 \
+    CV_EMBED_WIDTH=128 \
+    CV_EMBED_HEIGHT=256 \
+    CV_EMBED_BATCH=64 \
+    CV_EMBED_FLIP=true \
+    CV_EMBED_CENTER=true \
+    CV_REFERENCE_TOP_K=3 \
+    CV_REFERENCE_MIN_QUALITY=0.34 \
+    CV_AUTO_REFERENCE=true \
     CV_BATCH_SIZE=32 \
     CV_DETECT_EVERY=2 \
     CV_TARGET_RECALL=true \
@@ -84,6 +94,15 @@ from app.pipeline.detector import PersonDetector;\
 d = PersonDetector('yolo');\
 assert d.backend == 'yolo', 'YOLO backend failed to load: ' + str(d.backend_error)" \
     && python -c "from app.pipeline.detector import PersonDetector; PersonDetector('torchvision')" \
+    && python -c "\
+import torchvision;\
+torchvision.models.resnet18(weights='IMAGENET1K_V1');\
+print('resnet18 reid weights baked')" \
+    && python -c "\
+from app.pipeline.embedder import AppearanceEmbedder;\
+e = AppearanceEmbedder('resnet18');\
+assert e.available, 'appearance embedder failed to load: ' + str(e.backend_error);\
+print('appearance embedder ok dim=', e.dim)" \
     && chmod -R a+rwX /models
 
 # Run unprivileged; the app only needs to write to CV_WORK_DIR.

@@ -54,6 +54,34 @@ function formatValue(key: string, value: unknown): string {
   return String(value ?? "—");
 }
 
+/** Phase 3F appearance / re-identification diagnostics (nested `metrics.appearance`). */
+const APPEARANCE_LABELS: Record<string, string> = {
+  embeddingModel: "Embedding model",
+  embeddingVersion: "Embedding version",
+  embeddingDimensions: "Embedding dimensions",
+  embeddingPrecision: "Embedding precision",
+  embeddingDevice: "Embedding device",
+  embeddingsComputed: "Crops embedded",
+  embeddingWeight: "Embedding weight",
+  colourWeight: "Colour weight",
+  referenceBankSize: "Reference bank size",
+  referenceConfirmedGameCrops: "Confirmed game crops",
+  referenceAutoCollected: "Auto-collected crops",
+  referenceLibraryPhotos: "Library photos",
+  referencePoseBuckets: "Distinct pose/view buckets",
+  referenceMeanQuality: "Mean reference quality",
+  referenceRejectedLowQuality: "References rejected (low quality)",
+  autoReferencesCollected: "References collected in-game",
+  matchSimilarityMeanAccepted: "Match similarity (accepted)",
+  matchSimilarityP90Accepted: "Match similarity p90 (accepted)",
+  matchSimilarityMeanRejected: "Match similarity (rejected)",
+  matchSimilaritySeparation: "Similarity separation",
+  signalMeanReferenceAppearance: "Signal: appearance",
+  signalMeanTrackContinuity: "Signal: continuity",
+  signalMeanUniformColour: "Signal: uniform colour",
+  embeddingModelError: "Embedding model error",
+};
+
 /**
  * Admin/debug attribution for one analysis run: which service produced it, the
  * model versions behind it, real inference metrics, and a few annotated frames.
@@ -83,6 +111,12 @@ export function AnalysisDiagnostics({
 
   const entries = metrics
     ? Object.entries(METRIC_LABELS).filter(([key]) => metrics[key] !== undefined)
+    : [];
+  const appearance = (metrics?.["appearance"] ?? null) as Record<string, unknown> | null;
+  const appearanceEntries = appearance
+    ? Object.entries(APPEARANCE_LABELS).filter(
+        ([key]) => appearance[key] !== undefined && appearance[key] !== null,
+      )
     : [];
 
   return (
@@ -131,6 +165,27 @@ export function AnalysisDiagnostics({
           ))}
         </dl>
       )}
+
+      {appearanceEntries.length > 0 ? (
+        <div className="mt-4">
+          <p className="label-caps mb-2 text-[10px] text-muted-foreground">
+            Appearance &amp; re-identification
+          </p>
+          <dl className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {appearanceEntries.map(([key, label]) => (
+              <div
+                key={key}
+                className="rounded-lg border border-border bg-surface-2 px-3 py-2"
+              >
+                <dt className="label-caps text-[10px] text-muted-foreground">{label}</dt>
+                <dd className="text-sm font-semibold tabular-nums break-words">
+                  {formatValue(key, appearance?.[key])}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      ) : null}
 
       {versions || frames.length > 0 ? (
         <div className="mt-3">
