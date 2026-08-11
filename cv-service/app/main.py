@@ -69,6 +69,35 @@ def _device_name() -> str:
     return "cuda" if torch.cuda.is_available() else "cpu"
 
 
+_embedder_info: dict = {}
+
+
+def _embedder_runtime() -> dict:
+    """Warm the appearance embedder so /ready reports what actually loaded."""
+    global _embedder_info
+    if _embedder_info:
+        return _embedder_info
+    try:
+        from app.pipeline.embedder import embedder  # noqa: PLC0415
+
+        _embedder_info = embedder().stats()
+    except Exception as error:  # noqa: BLE001
+        log.exception("appearance embedder warmup failed")
+        _embedder_info = {
+            "embeddingModel": "unavailable",
+            "embeddingModelRequested": settings.embedder_backend,
+            "embeddingModelError": f"{type(error).__name__}: {error}",
+        }
+    _embedder_info = {
+        **_embedder_info,
+        "embeddingWeight": settings.embed_weight,
+        "referenceTopK": settings.reference_top_k,
+        "referenceMinQuality": settings.reference_min_quality,
+        "autoReferenceCollection": settings.auto_reference_collect,
+    }
+    return _embedder_info
+
+
 def _device_details() -> dict:
     cuda = torch.cuda.is_available()
     return {
@@ -151,6 +180,7 @@ def _readiness() -> dict:
             "detectorBackendRequested": settings.detector_backend,
             "detectorBackendError": runtime.get("error"),
             "fp16": runtime.get("fp16", settings.use_fp16),
+            **_embedder_runtime(),
             "analysisFps": settings.analysis_fps,
             "detectionResolution": settings.detection_resolution,
             "batchSize": settings.batch_size,

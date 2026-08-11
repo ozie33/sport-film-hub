@@ -28,9 +28,15 @@ it never runs unauthenticated.
    Optional sports-ball detection for involvement scoring.
 3. **Multi-object tracking** — IoU + appearance association with short-term
    occlusion memory. Track ids are per-video and are never player ids.
-4. **Identification / re-identification** — trust-weighted appearance gallery
-   built from user-confirmed crops (highest trust), game crops, then reference
-   photos, combined with uniform-colour affinity and temporal continuity.
+4. **Identification / re-identification (0.5.0)** — a learned appearance
+   embedding (ImageNet ResNet-18, global pooled, flip-averaged, running-mean
+   centred) is the primary signal; torso/leg colour histograms are secondary and
+   uniform-colour affinity plus temporal continuity are tertiary. References
+   live in a multi-view **reference bank**: user-confirmed same-game crops
+   (weight 1.0) outrank auto-collected in-game crops (0.82), which outrank the
+   player's reference library (0.55/0.34). Every candidate crop is quality
+   scored (size, sharpness, exposure, occlusion) and bucketed by pose/court
+   zone so the bank keeps genuinely different views instead of duplicates.
    No face recognition; jersey legibility is a bonus signal only.
 5. **Needs-confirmation** — when identity confidence drops below the threshold
    the service does **not** switch athletes. It keeps the current target and
@@ -163,6 +169,16 @@ failed, and cancelled jobs alike. Deletion is logged.
 | `ANALYSIS_CONFIRMATION_THRESHOLD` | no | 0.55 | Below this, ask the user |
 | `ANALYSIS_PRE_ROLL` / `_POST_ROLL` | no | 3 / 4 | Clip padding (seconds) |
 | `ANALYSIS_BALL_DETECTION` | no | true | Ball proximity signal |
+| `CV_EMBEDDER` | no | resnet18 | Appearance embedding backbone; `none` = colour histograms only |
+| `CV_EMBED_WEIGHT` | no | 0.75 | Embedding share of appearance similarity (rest is colour) |
+| `CV_EMBED_WIDTH` / `CV_EMBED_HEIGHT` | no | 128 / 256 | Crop resize for embedding (cubic upscale for tiny boxes) |
+| `CV_EMBED_BATCH` | no | 64 | Embedding batch size |
+| `CV_EMBED_FLIP` | no | true | Average each crop with its mirror (view invariance) |
+| `CV_EMBED_CENTER` | no | true | Subtract the running mean embedding before cosine |
+| `CV_REFERENCE_TOP_K` | no | 3 | Reference views aggregated per match |
+| `CV_REFERENCE_MIN_QUALITY` | no | 0.34 | Quality floor for auto/low-trust references |
+| `CV_AUTO_REFERENCE` | no | true | Collect high-quality in-game target crops as references |
+| `CV_AUTO_REFERENCE_INTERVAL` | no | 12 | Seconds between auto-collected references |
 
 ### Application
 

@@ -43,6 +43,24 @@ class IdentityState:
     # Phase 3E target memory.
     last_target_box: tuple[float, float, float, float] | None = None
     last_target_time: float | None = None
+    # Phase 3F appearance diagnostics: mean contribution of each signal.
+    signal_totals: dict[str, float] = field(default_factory=dict)
+    signal_samples: int = 0
+
+    def note_signals(self, values: dict[str, float]) -> None:
+        self.signal_samples += 1
+        for key, value in values.items():
+            self.signal_totals[key] = self.signal_totals.get(key, 0.0) + float(value)
+
+    def signal_report(self) -> dict:
+        if not self.signal_samples:
+            return {}
+        return {
+            f"signalMean{key[:1].upper()}{key[1:]}": round(
+                total / self.signal_samples, 3
+            )
+            for key, total in sorted(self.signal_totals.items())
+        }
 
     def remember_target(self, box, timestamp: float) -> None:
         self.last_target_box = box
@@ -138,6 +156,15 @@ def score_track(
         + weights["colour"] * colour
         + weights["jersey"] * jersey_hint
     )
+    state.note_signals(
+        {
+            "referenceAppearance": reference_score,
+            "trackContinuity": continuity,
+            "uniformColour": colour,
+        }
+    )
+    if track.track_id == state.target_track_id:
+        gallery.note_positive(reference_score)
     return float(max(0.0, min(1.0, score)))
 
 

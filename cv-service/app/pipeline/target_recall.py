@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from app.pipeline.reid import ReferenceGallery, signature as appearance_signature, similarity
+from app.pipeline.reid import ReferenceGallery, signatures_batch, similarity
 
 
 @dataclass
@@ -94,6 +94,9 @@ def recall_target_detections(
     height = float(frame.shape[0])
     scored: list[tuple[float, float, object, str]] = []
 
+    # Phase 3F: one batched embedding pass for all candidates instead of one
+    # forward pass per crop — the learned appearance model is the expensive part.
+    viable: list[tuple[object, str]] = []
     for detection, reason in rejected:
         box = detection.box
         box_height_fraction = (box[3] - box[1]) / max(1.0, height)
@@ -108,8 +111,11 @@ def recall_target_detections(
         # Even a soft filter has a floor: sub-pixel blobs are never a player.
         if box_height_fraction < min_height_fraction:
             continue
+        viable.append((detection, reason))
 
-        sig = appearance_signature(frame, box)
+    candidate_signatures = signatures_batch(frame, [d.box for d, _ in viable])
+    for (detection, reason), sig in zip(viable, candidate_signatures):
+        box = detection.box
         if sig is None or not getattr(sig, "size", 0):
             continue
         appearance = max(gallery.score(sig), similarity(target_signature, sig) if target_signature is not None else 0.0)
@@ -125,7 +131,9 @@ def recall_target_detections(
         needed = near_appearance_threshold if near else appearance_threshold
         if appearance < needed:
             stats.rejected_by_appearance += 1
+            gallery.note_rejected(appearance)
             continue
+        gallery.note_positive(appearance)
         scored.append((appearance, distance, detection, reason))
 
     if not scored:
