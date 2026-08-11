@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from app.pipeline.calibration import calibrator
 from app.pipeline.reid import ReferenceGallery, signatures_batch, similarity
 
 
@@ -33,17 +34,21 @@ class TargetRecallStats:
     memory_frames: int = 0
     soft_confidence_penalties: int = 0
     appearance_scores: list[float] = field(default_factory=list)
+    raw_appearance_scores: list[float] = field(default_factory=list)
 
     @property
     def rescued_total(self) -> int:
         return self.rescued_size + self.rescued_court + self.rescued_aspect
 
-    def note_appearance(self, value: float) -> None:
+    def note_appearance(self, value: float, raw: float | None = None) -> None:
         if len(self.appearance_scores) < 20000:
             self.appearance_scores.append(round(float(value), 3))
+        if raw is not None and len(self.raw_appearance_scores) < 20000:
+            self.raw_appearance_scores.append(round(float(raw), 3))
 
     def payload(self) -> dict:
         scores = self.appearance_scores
+        raw_scores = self.raw_appearance_scores
         return {
             "targetCandidatesConsidered": self.candidates_considered,
             "targetRejectedBySize": self.rejected_by_size,
@@ -59,6 +64,9 @@ class TargetRecallStats:
             "targetFailedReacquisitions": self.failed_reacquisitions,
             "targetMemoryFrames": self.memory_frames,
             "targetRescueAppearanceMean": round(float(np.mean(scores)), 3) if scores else 0.0,
+            "targetRescueAppearanceMeanRaw": round(float(np.mean(raw_scores)), 3)
+            if raw_scores
+            else 0.0,
         }
 
 
@@ -92,6 +100,11 @@ def recall_target_detections(
         return []
 
     height = float(frame.shape[0])
+    calib = calibrator()
+    if calib.enabled:
+        # Percentile-derived rescue gates replace the histogram-era constants.
+        appearance_threshold = calib.threshold("rescue")
+        near_appearance_threshold = calib.threshold("rescue_near")
     scored: list[tuple[float, float, object, str]] = []
 
     # Phase 3F: one batched embedding pass for all candidates instead of one
@@ -118,8 +131,12 @@ def recall_target_detections(
         box = detection.box
         if sig is None or not getattr(sig, "size", 0):
             continue
-        appearance = max(gallery.score(sig), similarity(target_signature, sig) if target_signature is not None else 0.0)
-        stats.note_appearance(appearance)
+        raw_appearance = max(
+            gallery.score_raw(sig),
+            similarity(target_signature, sig) if target_signature is not None else 0.0,
+        )
+        appearance = calib.normalize(raw_appearance)
+        stats.note_appearance(appearance, raw_appearance)
 
         distance = float("inf")
         if last_target_box is not None:
@@ -129,11 +146,13 @@ def recall_target_detections(
 
         near = distance <= near_radius_px
         needed = near_appearance_threshold if near else appearance_threshold
-        if appearance < needed:
+        accepted = appearance >= needed
+        calib.note_decision("rescue_near" if near else "rescue", accepted)
+        if not accepted:
             stats.rejected_by_appearance += 1
-            gallery.note_rejected(appearance)
+            gallery.note_rejected(raw_appearance)
             continue
-        gallery.note_positive(appearance)
+        gallery.note_positive(raw_appearance)
         scored.append((appearance, distance, detection, reason))
 
     if not scored:
