@@ -767,7 +767,9 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                 job_settings.preRoll,
                 job_settings.postRoll,
                 duration or 0.0,
-                max(0.35, job_settings.identityMediumThreshold * 0.8),
+                # Target-biased retention: clips are kept at the target retain
+                # threshold, not the stricter generic identity threshold.
+                max(settings.target_retain_threshold, job_settings.identityMediumThreshold * 0.6),
             )
         for candidate in candidates:
             candidate["trackId"] = state.target_track_id or (
