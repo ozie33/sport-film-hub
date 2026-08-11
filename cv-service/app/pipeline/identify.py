@@ -300,9 +300,9 @@ def choose_target(
             accepted = candidate[1] >= reacquire_threshold
             calib.note_decision("reacquire", accepted)
             if accepted:
-                state.target_track_id = candidate[0].track_id
                 if state.target_track_id != candidate[0].track_id:
                     state.note_switch("reacquisition")
+                state.target_track_id = candidate[0].track_id
                 state.target_signature = candidate[0].mean_signature
                 state.locked = True
                 state.lock_time = timestamp
