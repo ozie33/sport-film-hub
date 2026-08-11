@@ -923,6 +923,8 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                 # Target-biased retention: clips are kept at the target retain
                 # threshold, not the stricter generic identity threshold.
                 max(settings.target_retain_threshold, job_settings.identityMediumThreshold * 0.6),
+                gap_limit=settings.candidate_gap_limit_seconds,
+                min_segment_seconds=settings.candidate_min_segment_seconds,
             )
         for candidate in candidates:
             candidate["trackId"] = state.target_track_id or (
@@ -1026,11 +1028,22 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                     "targetRecallAppearance": settings.target_recall_appearance,
                     "targetRecallNearAppearance": settings.target_recall_near_appearance,
                     "targetRecallNearPx": settings.target_recall_near_px,
+                    "targetRecallFarPx": settings.target_recall_far_px,
+                    "targetHysteresisBonus": settings.target_hysteresis_bonus,
+                    "targetSwitchFrames": settings.target_switch_frames,
+                    "reidShortlistEnabled": settings.reid_shortlist,
+                    "reidShortlistTopK": settings.reid_shortlist_top_k,
+                    "embeddingCacheEnabled": settings.embedding_cache,
+                    "embeddingCacheSeconds": settings.embedding_cache_seconds,
+                    "prototypeBankEnabled": settings.prototype_bank,
+                    "prototypeCount": settings.prototype_count,
+                    "candidateMinSegmentSeconds": settings.candidate_min_segment_seconds,
                     "targetMemorySeconds": settings.target_memory_seconds,
                     "similarityCalibration": settings.similarity_calibration,
                     "calibratedThresholds": calib.thresholds(),
                 },
                 "targetRecall": recall_stats.payload(),
+                "reidEfficiency": reid_stats.payload(),
                 "calibration": calib.payload(),
                 "appearance": {
                     **embedder().stats(),
@@ -1047,6 +1060,7 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                 "targetTrackingCoverage": coverage,
                 "targetVisibleSeconds": round(analyzed_span, 2),
                 "targetTrackChanges": state.switches,
+                "targetTrackChangeCauses": state.switch_causes,
                 "lowConfidenceIntervals": state.low_confidence_intervals,
                 "confirmationsRequested": len(state.needs_confirmation),
                 "confirmationsSupplied": len(confirmations),
