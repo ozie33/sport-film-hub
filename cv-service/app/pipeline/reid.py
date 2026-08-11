@@ -19,6 +19,7 @@ import cv2
 import numpy as np
 
 from app.config import settings
+from app.pipeline.calibration import calibrator
 from app.pipeline.embedder import embedder
 from app.pipeline.quality import CropQuality, crop_quality
 
@@ -302,8 +303,8 @@ class ReferenceBank:
             self.evicted += 1
 
     # -------------------------------------------------------------- scoring
-    def score(self, vector: np.ndarray | None, *, top_k: int | None = None) -> float:
-        """Trust-weighted top-k match. AI-generated crops never dominate."""
+    def score_raw(self, vector: np.ndarray | None, *, top_k: int | None = None) -> float:
+        """Trust-weighted top-k match in RAW cosine space (uncalibrated)."""
         self.flush_pending()
         if vector is None or vector.size == 0 or not self.entries:
             return 0.0
@@ -322,6 +323,21 @@ class ReferenceBank:
         rest = float(np.mean(scored[1:]))
         return float(max(0.0, min(1.0, 0.7 * best + 0.3 * rest)))
 
+    def score(self, vector: np.ndarray | None, *, top_k: int | None = None) -> float:
+        """Calibrated 0..1 appearance confidence (Phase 3F.1).
+
+        The learned embedding has its own similarity scale, so every consumer
+        works in calibrated space; raw values remain available for diagnostics
+        and for feeding the calibrator itself.
+        """
+        return calibrator().normalize(self.score_raw(vector, top_k=top_k))
+
+    def prime_calibration(self) -> int:
+        """Seed the positive distribution from confirmed same-game crops."""
+        self.flush_pending()
+        trusted = [e.vector for e in self.entries if e.trust in ("high", "auto")]
+        return calibrator().prime_from_vectors(trusted)
+
     def best_by_trust(self, vector: np.ndarray | None) -> dict[str, float]:
         out: dict[str, float] = {}
         if vector is None or vector.size == 0:
@@ -333,10 +349,12 @@ class ReferenceBank:
         return out
 
     def note_positive(self, value: float) -> None:
+        calibrator().observe_positive(value)
         if len(self.positive_scores) < 40000:
             self.positive_scores.append(round(float(value), 3))
 
     def note_rejected(self, value: float) -> None:
+        calibrator().observe_negative(value)
         if len(self.rejected_scores) < 40000:
             self.rejected_scores.append(round(float(value), 3))
 
