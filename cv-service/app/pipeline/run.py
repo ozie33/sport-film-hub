@@ -445,8 +445,18 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
                 state.note_reid("new_or_reappeared_track")
 
             need_signatures_now = bool(event_ids) or reid_all
+            # Only the tracks the event actually concerns (new, reappeared, or
+            # the target) are worth a second embedding pass — embedding every
+            # skipped person here would undo the shortlist savings.
+            relevant_ids = set(event_ids)
+            if state.target_track_id:
+                relevant_ids.add(state.target_track_id)
             missing_now = [
-                index for index, sig in enumerate(signatures) if sig is None
+                index
+                for index, sig in enumerate(signatures)
+                if sig is None
+                and index < len(updated)
+                and (reid_all or updated[index][0].track_id in relevant_ids)
             ]
             if need_signatures_now and missing_now:
                 # An event needs full evidence: embed the crops the shortlist
