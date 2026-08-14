@@ -7,6 +7,7 @@
  */
 
 import { videoMimeType } from "@/lib/video/upload";
+
 const CHUNK_SIZE = 8 * 1024 * 1024;
 
 export type DriveUploadController = {
