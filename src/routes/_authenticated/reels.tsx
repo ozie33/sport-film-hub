@@ -27,6 +27,8 @@ import {
   useReorderReelClips,
 } from "@/lib/data/ai-queries";
 import { formatClock, fullName } from "@/lib/format";
+import { PRODUCT_EVENTS } from "@/lib/analytics/events";
+import { trackEvent } from "@/lib/analytics/track";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/reels")({
@@ -128,6 +130,11 @@ function ReelEditor({ reelId }: { reelId: string }) {
   }
 
   function regenerate() {
+    trackEvent(PRODUCT_EVENTS.buildReelUsed, {
+      playerId: reel!.player_id,
+      reelId: reel!.id,
+      properties: { mode: reel!.reel_type, source: "regenerate" },
+    });
     rebuild.mutate(
       {
         mode: reel!.reel_type,
@@ -139,6 +146,11 @@ function ReelEditor({ reelId }: { reelId: string }) {
       },
       {
         onSuccess: (result) => {
+          trackEvent(PRODUCT_EVENTS.reelCompleted, {
+            playerId: reel!.player_id,
+            reelId: result.reelId,
+            properties: { mode: reel!.reel_type, clip_count: result.clipCount, version: true },
+          });
           toast.success(`New version created with ${result.clipCount} plays`);
           setAdjustments([]);
         },

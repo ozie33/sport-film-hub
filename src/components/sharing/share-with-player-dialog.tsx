@@ -30,6 +30,8 @@ import {
   type ShareResourceType,
 } from "@/lib/sharing/sharing.functions";
 import { fullName } from "@/lib/format";
+import { PRODUCT_EVENTS } from "@/lib/analytics/events";
+import { trackEvent } from "@/lib/analytics/track";
 import { cn } from "@/lib/utils";
 
 type SourceCheck = Awaited<ReturnType<typeof checkShareSourceAccess>>["sources"][number];
@@ -118,6 +120,12 @@ export function ShareWithPlayerDialog({
         note: note.trim() || null,
         source_access_state: sourceState(sources),
       });
+      if (resourceType === "reel") {
+        trackEvent(PRODUCT_EVENTS.reelShared, {
+          reelId: resourceId,
+          properties: { recipient_has_account: Boolean(recipient?.found), permission },
+        });
+      }
       toast.success(
         recipient?.found
           ? "Shared. It now appears in their Shared with me."
