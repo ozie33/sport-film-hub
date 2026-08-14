@@ -98,7 +98,7 @@ export function uploadFilmFile(options: {
       request.setRequestHeader("apikey", apiKey);
       request.setRequestHeader("x-upsert", "true");
       request.setRequestHeader("cache-control", "3600");
-      if (options.file.type) request.setRequestHeader("content-type", options.file.type);
+      request.setRequestHeader("content-type", videoMimeType(options.file));
       request.upload.onprogress = (progressEvent) => {
         if (!progressEvent.lengthComputable) return;
         options.onProgress(Math.round((progressEvent.loaded / progressEvent.total) * 100));

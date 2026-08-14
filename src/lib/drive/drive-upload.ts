@@ -1,4 +1,5 @@
 /**
+import { videoMimeType } from "@/lib/video/upload";
  * Browser-side resumable upload straight into the user's own Google Drive.
  *
  * The session URL is a one-time capability created by an authenticated server
@@ -34,7 +35,7 @@ export function uploadFileToDrive(options: {
         start: offset,
         end: end - 1,
         total,
-        mimeType: options.file.type || "video/mp4",
+        mimeType: videoMimeType(options.file),
         onProgress: (loaded) =>
           options.onProgress(Math.min(99, Math.round(((offset + loaded) / total) * 100))),
         register: (request) => {
