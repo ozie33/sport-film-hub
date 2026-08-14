@@ -1,4 +1,5 @@
 import { BookOpen } from "lucide-react";
+import { useEffect } from "react";
 import { toast } from "sonner";
 
 import { SectionCard } from "@/components/common/stat-card";
@@ -6,12 +7,20 @@ import { Tag } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { AI_SCOPE_DISCLAIMER, reviewedPlaysLabel } from "@/lib/ai/review-ai";
 import { useGameStory, useGenerateGameStory } from "@/lib/data/ai-queries";
+import { PRODUCT_EVENTS } from "@/lib/analytics/events";
+import { trackEvent } from "@/lib/analytics/track";
 
 /** Narrative built from marked plays only — never described as watched film. */
 export function GameStoryCard({ gameId, clipCount }: { gameId: string; clipCount: number }) {
   const { data: report } = useGameStory(gameId);
   const generate = useGenerateGameStory();
   const story = report?.content ?? null;
+
+  // Counts as "viewed" only when there is a story on screen to read.
+  useEffect(() => {
+    if (!story) return;
+    trackEvent(PRODUCT_EVENTS.gameStoryViewed, { gameId, oncePerSession: gameId });
+  }, [story, gameId]);
 
   function run() {
     generate.mutate(
