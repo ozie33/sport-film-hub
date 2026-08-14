@@ -19,6 +19,7 @@ import { Route as AuthenticatedFilmRoomRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authenticated/onboarding'
 import { Route as AuthenticatedReelsRouteImport } from './routes/_authenticated/reels'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
+import { Route as AuthenticatedAdminAnalyticsRouteImport } from './routes/_authenticated/admin.analytics'
 import { Route as AuthenticatedAnalysisJobIdRouteImport } from './routes/_authenticated/analysis.$jobId'
 import { Route as AuthenticatedGamesIndexRouteImport } from './routes/_authenticated/games.index'
 import { Route as AuthenticatedGamesGameIdRouteImport } from './routes/_authenticated/games.$gameId'
@@ -78,6 +79,12 @@ const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAdminAnalyticsRoute =
+  AuthenticatedAdminAnalyticsRouteImport.update({
+    id: '/admin/analytics',
+    path: '/admin/analytics',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedAnalysisJobIdRoute =
   AuthenticatedAnalysisJobIdRouteImport.update({
     id: '/analysis/$jobId',
@@ -134,6 +141,7 @@ export interface FileRoutesByFullPath {
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/reels': typeof AuthenticatedReelsRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/admin/analytics': typeof AuthenticatedAdminAnalyticsRoute
   '/analysis/$jobId': typeof AuthenticatedAnalysisJobIdRoute
   '/games/$gameId': typeof AuthenticatedGamesGameIdRoute
   '/players/$playerId': typeof AuthenticatedPlayersPlayerIdRoute
@@ -153,6 +161,7 @@ export interface FileRoutesByTo {
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/reels': typeof AuthenticatedReelsRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/admin/analytics': typeof AuthenticatedAdminAnalyticsRoute
   '/analysis/$jobId': typeof AuthenticatedAnalysisJobIdRoute
   '/games/$gameId': typeof AuthenticatedGamesGameIdRoute
   '/players/$playerId': typeof AuthenticatedPlayersPlayerIdRoute
@@ -174,6 +183,7 @@ export interface FileRoutesById {
   '/_authenticated/onboarding': typeof AuthenticatedOnboardingRoute
   '/_authenticated/reels': typeof AuthenticatedReelsRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
+  '/_authenticated/admin/analytics': typeof AuthenticatedAdminAnalyticsRoute
   '/_authenticated/analysis/$jobId': typeof AuthenticatedAnalysisJobIdRoute
   '/_authenticated/games/$gameId': typeof AuthenticatedGamesGameIdRoute
   '/_authenticated/players/$playerId': typeof AuthenticatedPlayersPlayerIdRoute
@@ -195,6 +205,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/reels'
     | '/settings'
+    | '/admin/analytics'
     | '/analysis/$jobId'
     | '/games/$gameId'
     | '/players/$playerId'
@@ -214,6 +225,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/reels'
     | '/settings'
+    | '/admin/analytics'
     | '/analysis/$jobId'
     | '/games/$gameId'
     | '/players/$playerId'
@@ -234,6 +246,7 @@ export interface FileRouteTypes {
     | '/_authenticated/onboarding'
     | '/_authenticated/reels'
     | '/_authenticated/settings'
+    | '/_authenticated/admin/analytics'
     | '/_authenticated/analysis/$jobId'
     | '/_authenticated/games/$gameId'
     | '/_authenticated/players/$playerId'
@@ -326,6 +339,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/admin/analytics': {
+      id: '/_authenticated/admin/analytics'
+      path: '/admin/analytics'
+      fullPath: '/admin/analytics'
+      preLoaderRoute: typeof AuthenticatedAdminAnalyticsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/analysis/$jobId': {
       id: '/_authenticated/analysis/$jobId'
       path: '/analysis/$jobId'
@@ -392,6 +412,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedOnboardingRoute: typeof AuthenticatedOnboardingRoute
   AuthenticatedReelsRoute: typeof AuthenticatedReelsRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
+  AuthenticatedAdminAnalyticsRoute: typeof AuthenticatedAdminAnalyticsRoute
   AuthenticatedAnalysisJobIdRoute: typeof AuthenticatedAnalysisJobIdRoute
   AuthenticatedGamesGameIdRoute: typeof AuthenticatedGamesGameIdRoute
   AuthenticatedPlayersPlayerIdRoute: typeof AuthenticatedPlayersPlayerIdRoute
@@ -406,6 +427,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedOnboardingRoute: AuthenticatedOnboardingRoute,
   AuthenticatedReelsRoute: AuthenticatedReelsRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
+  AuthenticatedAdminAnalyticsRoute: AuthenticatedAdminAnalyticsRoute,
   AuthenticatedAnalysisJobIdRoute: AuthenticatedAnalysisJobIdRoute,
   AuthenticatedGamesGameIdRoute: AuthenticatedGamesGameIdRoute,
   AuthenticatedPlayersPlayerIdRoute: AuthenticatedPlayersPlayerIdRoute,
