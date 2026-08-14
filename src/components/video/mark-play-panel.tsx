@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useMarkPlay } from "@/lib/data/video-queries";
+import { PRODUCT_EVENTS } from "@/lib/analytics/events";
+import { trackEvent } from "@/lib/analytics/track";
 import type { EventTypeRecord } from "@/lib/domain";
 import { formatClock } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -47,6 +49,17 @@ export function MarkPlayPanel({
 }) {
   const markPlay = useMarkPlay();
   const formRef = useRef<HTMLFormElement | null>(null);
+  const markedInSession = useRef(0);
+
+  // Analytics only: a review "starts" when the panel is usable on real film.
+  useEffect(() => {
+    if (!videoAssetId) return;
+    trackEvent(PRODUCT_EVENTS.smartReviewStarted, {
+      gameId,
+      oncePerSession: gameId,
+      properties: { video_asset_id: videoAssetId },
+    });
+  }, [videoAssetId, gameId]);
 
   const [inPoint, setInPoint] = useState<number | null>(null);
   const [outPoint, setOutPoint] = useState<number | null>(null);
@@ -117,6 +130,16 @@ export function MarkPlayPanel({
         notes: notes.trim() || null,
       });
       toast.success("Play marked and added to your clips.");
+      markedInSession.current += 1;
+      trackEvent(PRODUCT_EVENTS.playMarked, {
+        gameId,
+        playerId: playerId === NONE ? null : playerId,
+        properties: {
+          marked_in_session: markedInSession.current,
+          event_type_key: typeKey,
+          clip_length_seconds: Math.round(end - inPoint),
+        },
+      });
       setInPoint(null);
       setOutPoint(null);
       setNotes("");
