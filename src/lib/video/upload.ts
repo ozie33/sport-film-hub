@@ -41,6 +41,21 @@ export function isAcceptedVideoFile(file: File): boolean {
   );
 }
 
+const EXTENSION_MIME: Record<string, string> = {
+  ".mp4": "video/mp4",
+  ".mov": "video/quicktime",
+  ".m4v": "video/x-m4v",
+  ".webm": "video/webm",
+};
+
+/** Browsers occasionally hand us an empty File.type — fall back to the extension. */
+export function videoMimeType(file: File): string {
+  if (file.type) return file.type;
+  const name = file.name.toLowerCase();
+  const match = Object.keys(EXTENSION_MIME).find((extension) => name.endsWith(extension));
+  return match ? EXTENSION_MIME[match]! : "video/mp4";
+}
+
 export function formatFileSize(bytes: number | null | undefined): string {
   if (!bytes || bytes <= 0) return "—";
   const units = ["B", "KB", "MB", "GB"];
