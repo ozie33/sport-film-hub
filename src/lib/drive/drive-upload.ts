@@ -1,11 +1,12 @@
 /**
-import { videoMimeType } from "@/lib/video/upload";
  * Browser-side resumable upload straight into the user's own Google Drive.
  *
  * The session URL is a one-time capability created by an authenticated server
  * function — no Google token is exposed, and the bytes never pass through (or
  * stay in) application storage.
  */
+
+import { videoMimeType } from "@/lib/video/upload";
 const CHUNK_SIZE = 8 * 1024 * 1024;
 
 export type DriveUploadController = {
