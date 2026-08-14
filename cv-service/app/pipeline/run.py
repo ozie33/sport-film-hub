@@ -131,8 +131,17 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
         temp = video_io.fetch_video(request.jobId, request.video.url)
 
     try:
+        source_path = temp.path
         with timer.stage("probe"):
-            info = video_io.probe(temp.path)
+            try:
+                info = video_io.probe(source_path)
+            except RuntimeError:
+                # Some containers (e.g. certain WebM/VP9 encodes) won't open with
+                # the installed decoder. Normalize a temporary copy instead of
+                # rejecting the film; it is removed with the job directory.
+                progress("preparing_video", "Preparing film for analysis", 6)
+                source_path = video_io.normalize_for_analysis(request.jobId, source_path)
+                info = video_io.probe(source_path)
         duration = float(request.video.durationSeconds or info.duration or 0.0)
         analysis_fps = max(0.25, float(job_settings.analysisFps))
         batch_size = max(1, settings.batch_size)
@@ -697,7 +706,7 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
 
         if decode_io.ffmpeg_available():
             decode_iterator = decode_io.iter_frames(
-                temp.path,
+                source_path,
                 analysis_fps,
                 info.width,
                 info.height,
@@ -709,7 +718,7 @@ def run_job(request: JobRequest, progress: Progress) -> dict:
             decode_iterator = (
                 (timestamp, video_io.resize_for_detection(frame, job_settings.detectionResolution)[0])
                 for timestamp, frame in video_io.iter_frames(
-                    temp.path, analysis_fps, settings.max_frames or 10**9
+                    source_path, analysis_fps, settings.max_frames or 10**9
                 )
             )
         decode_started = time.perf_counter()

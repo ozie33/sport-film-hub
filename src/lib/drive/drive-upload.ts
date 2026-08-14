@@ -5,6 +5,9 @@
  * function — no Google token is exposed, and the bytes never pass through (or
  * stay in) application storage.
  */
+
+import { videoMimeType } from "@/lib/video/upload";
+
 const CHUNK_SIZE = 8 * 1024 * 1024;
 
 export type DriveUploadController = {
@@ -34,7 +37,7 @@ export function uploadFileToDrive(options: {
         start: offset,
         end: end - 1,
         total,
-        mimeType: options.file.type || "video/mp4",
+        mimeType: videoMimeType(options.file),
         onProgress: (loaded) =>
           options.onProgress(Math.min(99, Math.round(((offset + loaded) / total) * 100))),
         register: (request) => {

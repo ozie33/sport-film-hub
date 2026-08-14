@@ -36,6 +36,7 @@ import {
   buildFilmStoragePath,
   formatFileSize,
   isAcceptedVideoFile,
+  videoMimeType,
   probeVideoFile,
   uploadFilmFile,
   type UploadController,
@@ -196,7 +197,7 @@ function UploadForm({
         const session = await createDriveUploadSession({
           data: {
             name: file.name,
-            mimeType: file.type || "video/mp4",
+            mimeType: videoMimeType(file),
             size: file.size,
           },
         });
@@ -220,7 +221,7 @@ function UploadForm({
           embed_url: `https://drive.google.com/file/d/${fileId}/preview`,
           thumbnail_url: details?.thumbnailLink ?? null,
           original_filename: file.name,
-          mime_type: file.type || null,
+          mime_type: videoMimeType(file),
           file_size: file.size,
           duration: probe.duration,
           width: probe.width,
@@ -265,7 +266,7 @@ function UploadForm({
         access_level: "raw_video_available",
         storage_path: path,
         original_filename: file.name,
-        mime_type: file.type || null,
+        mime_type: videoMimeType(file),
         file_size: file.size,
         duration: probe.duration,
         width: probe.width,
