@@ -14,6 +14,60 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_reports: {
+        Row: {
+          content: Json
+          created_at: string
+          game_id: string | null
+          id: string
+          model_version: string | null
+          owner_id: string
+          player_id: string | null
+          report_type: string
+          reviewed_clip_count: number
+          updated_at: string
+        }
+        Insert: {
+          content?: Json
+          created_at?: string
+          game_id?: string | null
+          id?: string
+          model_version?: string | null
+          owner_id?: string
+          player_id?: string | null
+          report_type: string
+          reviewed_clip_count?: number
+          updated_at?: string
+        }
+        Update: {
+          content?: Json
+          created_at?: string
+          game_id?: string | null
+          id?: string
+          model_version?: string | null
+          owner_id?: string
+          player_id?: string | null
+          report_type?: string
+          reviewed_clip_count?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_reports_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "games"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_reports_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       analysis_jobs: {
         Row: {
           analysis_type: string
@@ -1561,6 +1615,127 @@ export type Database = {
           },
         ]
       }
+      reel_clips: {
+        Row: {
+          ai_reason: string | null
+          clip_id: string
+          created_at: string
+          id: string
+          position: number
+          reel_id: string
+        }
+        Insert: {
+          ai_reason?: string | null
+          clip_id: string
+          created_at?: string
+          id?: string
+          position?: number
+          reel_id: string
+        }
+        Update: {
+          ai_reason?: string | null
+          clip_id?: string
+          created_at?: string
+          id?: string
+          position?: number
+          reel_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reel_clips_clip_id_fkey"
+            columns: ["clip_id"]
+            isOneToOne: false
+            referencedRelation: "clips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reel_clips_reel_id_fkey"
+            columns: ["reel_id"]
+            isOneToOne: false
+            referencedRelation: "reels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reels: {
+        Row: {
+          created_at: string
+          game_id: string | null
+          generation_prompt: string | null
+          id: string
+          metadata: Json
+          model_version: string | null
+          owner_id: string
+          parent_reel_id: string | null
+          player_id: string | null
+          reel_type: string
+          reviewed_clip_count: number
+          source_game_ids: string[]
+          summary: string | null
+          title: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          game_id?: string | null
+          generation_prompt?: string | null
+          id?: string
+          metadata?: Json
+          model_version?: string | null
+          owner_id?: string
+          parent_reel_id?: string | null
+          player_id?: string | null
+          reel_type?: string
+          reviewed_clip_count?: number
+          source_game_ids?: string[]
+          summary?: string | null
+          title: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          created_at?: string
+          game_id?: string | null
+          generation_prompt?: string | null
+          id?: string
+          metadata?: Json
+          model_version?: string | null
+          owner_id?: string
+          parent_reel_id?: string | null
+          player_id?: string | null
+          reel_type?: string
+          reviewed_clip_count?: number
+          source_game_ids?: string[]
+          summary?: string | null
+          title?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reels_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "games"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reels_parent_reel_id_fkey"
+            columns: ["parent_reel_id"]
+            isOneToOne: false
+            referencedRelation: "reels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reels_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       shared_resources: {
         Row: {
           created_at: string
@@ -1966,6 +2141,7 @@ export type Database = {
       can_view_game: { Args: { _game_id: string }; Returns: boolean }
       can_view_player: { Args: { _player_id: string }; Returns: boolean }
       can_view_playlist: { Args: { _playlist_id: string }; Returns: boolean }
+      can_view_reel: { Args: { _reel_id: string }; Returns: boolean }
       has_resource_share: {
         Args: {
           _id: string
@@ -1983,6 +2159,7 @@ export type Database = {
       owns_game: { Args: { _game_id: string }; Returns: boolean }
       owns_player: { Args: { _player_id: string }; Returns: boolean }
       owns_playlist: { Args: { _playlist_id: string }; Returns: boolean }
+      owns_reel: { Args: { _reel_id: string }; Returns: boolean }
       shares_identity_with: {
         Args: { _other_user_id: string }
         Returns: boolean

@@ -333,7 +333,7 @@ export type ClipRecord = {
   } | null;
 };
 
-const CLIP_COLUMNS =
+export const CLIP_COLUMNS =
   "id, game_id, player_id, video_asset_id, event_id, title, category, start_time, end_time, approved, source, metadata, created_at, games(id, title, sport_id, opponent), players(first_name, last_name), video_assets(id, provider, access_level, external_video_id, external_url, embed_url, storage_path, label, thumbnail_url, duration), events(id, event_type_key, event_subtype, outcome, offense_or_defense, tags, notes)";
 
 export function useClips(gameId?: string) {

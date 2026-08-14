@@ -2,13 +2,18 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { TrendingUp } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
+import { DevelopmentSummaryCard } from "@/components/ai/development-summary-card";
 import { DemoNotice } from "@/components/common/demo-badge";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { SectionCard, StatCard } from "@/components/common/stat-card";
 import { Button } from "@/components/ui/button";
-import { useProfile } from "@/lib/data/queries";
+import { usePlayers, useProfile } from "@/lib/data/queries";
+import { useClips } from "@/lib/data/video-queries";
+import { fullName } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { demoDevelopment } from "@/lib/demo/demo-data";
+import { useState } from "react";
 
 export const Route = createFileRoute("/_authenticated/development")({
   head: () => ({
@@ -42,6 +47,51 @@ function Bar({ label, value }: { label: string; value: number }) {
 function DevelopmentPage() {
   const { data: profile } = useProfile();
   const demoMode = profile?.demo_mode ?? false;
+  const { data: players = [] } = usePlayers();
+  const { data: clips = [] } = useClips();
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
+
+  const playersWithClips = players.filter((player) =>
+    clips.some((clip) => clip.player_id === player.id),
+  );
+  const activePlayer =
+    playersWithClips.find((player) => player.id === selectedPlayerId) ?? playersWithClips[0] ?? null;
+
+  if (activePlayer) {
+    const playerClips = clips.filter((clip) => clip.player_id === activePlayer.id);
+    return (
+      <AppShell>
+        <PageHeader
+          eyebrow="Development"
+          title="Player Development"
+          description="Story-driven insight built from the plays you marked across games."
+          actions={
+            playersWithClips.length > 1 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {playersWithClips.map((player) => (
+                  <Button
+                    key={player.id}
+                    size="sm"
+                    variant={player.id === activePlayer.id ? "default" : "outline"}
+                    onClick={() => setSelectedPlayerId(player.id)}
+                    className={cn("truncate")}
+                  >
+                    {fullName(player.first_name, player.last_name)}
+                  </Button>
+                ))}
+              </div>
+            ) : undefined
+          }
+        />
+
+        <DevelopmentSummaryCard
+          playerId={activePlayer.id}
+          playerName={fullName(activePlayer.first_name, activePlayer.last_name) || "This athlete"}
+          clipCount={playerClips.length}
+        />
+      </AppShell>
+    );
+  }
 
   if (!demoMode) {
     return (
