@@ -28,6 +28,8 @@ import {
   type VideoProviderKey,
 } from "@/lib/video/capabilities";
 import { getHudlAccess, getYouTubeMetadata } from "@/lib/video/providers.functions";
+import { PRODUCT_EVENTS } from "@/lib/analytics/events";
+import { trackEvent } from "@/lib/analytics/track";
 import { DriveFilePicker, type DriveFile } from "@/components/video/drive-file-picker";
 import { uploadFileToDrive } from "@/lib/drive/drive-upload";
 import { createDriveUploadSession, getDriveFileDetails } from "@/lib/drive/drive.functions";
@@ -742,6 +744,10 @@ function LinkForm({
         rights_confirmed: true,
       });
       toast.success(`${adapter.label} film attached.`);
+      trackEvent(
+        provider === "youtube" ? PRODUCT_EVENTS.youtubeLinkAdded : PRODUCT_EVENTS.filmSourceAdded,
+        { gameId, properties: { provider, access_level: resolvedAccess } },
+      );
       setUrl("");
       setRights(false);
       onAdded?.();
