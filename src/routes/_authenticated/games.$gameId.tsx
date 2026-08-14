@@ -19,6 +19,9 @@ import { PlayerIdentitySummary } from "@/components/players/player-identity-summ
 import { AnalyzePlayerCard } from "@/components/analysis/analyze-player-card";
 import { AnalysisHistory } from "@/components/analysis/analysis-history";
 import { AiReadinessPlaceholders } from "@/components/players/ai-readiness-placeholders";
+import { OrganizeReviewCard } from "@/components/ai/organize-review-card";
+import { GameStoryCard } from "@/components/ai/game-story-card";
+import { AiPlaylistPrompt } from "@/components/ai/ai-playlist-prompt";
 import type { FilmPlayerHandle } from "@/components/video/film-player-types";
 import { PLAY_SIDE_LABELS } from "@/lib/domain";
 import {
@@ -29,7 +32,7 @@ import {
   useSportPositions,
 } from "@/lib/data/queries";
 import { teamDisplayName } from "@/lib/data/identity-queries";
-import { useVideoAssets } from "@/lib/data/video-queries";
+import { useClips, useVideoAssets } from "@/lib/data/video-queries";
 import { capabilitiesFor } from "@/lib/video/capabilities";
 import { formatClock, formatGameDate, fullName } from "@/lib/format";
 
@@ -58,6 +61,7 @@ export const Route = createFileRoute("/_authenticated/games/$gameId")({
 function GameDetail() {
   const { gameId } = Route.useParams();
   const { data: game, isLoading } = useGame(gameId);
+  const { data: gameClips = [] } = useClips(gameId);
   const { data: events = [] } = useGameEvents(gameId);
   const { data: eventTypes = [] } = useEventTypes(game?.sport_id ?? null);
   const { data: assets = [] } = useVideoAssets(gameId);
@@ -215,6 +219,17 @@ function GameDetail() {
       <AnalysisHistory gameId={game.id} />
 
       <AiReadinessPlaceholders />
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <OrganizeReviewCard
+          gameId={game.id}
+          playerId={primaryLink?.player_id ?? null}
+          clipCount={gameClips.length}
+        />
+        <AiPlaylistPrompt gameId={game.id} playerId={primaryLink?.player_id ?? null} />
+      </div>
+
+      <GameStoryCard gameId={game.id} clipCount={gameClips.length} />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <div className="space-y-6">

@@ -3,6 +3,7 @@ import { Film } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
+import { AiPlaylistPrompt } from "@/components/ai/ai-playlist-prompt";
 import { ClipCard } from "@/components/common/clip-card";
 import { DemoNotice } from "@/components/common/demo-badge";
 import { EmptyState } from "@/components/common/empty-state";
@@ -15,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { PlayerCut } from "@/components/video/player-cut";
 import { clipSourceLabel } from "@/lib/analysis/analysis";
 import { useClips, type ClipRecord } from "@/lib/data/video-queries";
+import { usePlaylistClips, usePlaylists } from "@/lib/data/ai-queries";
 import { useGames, useProfile } from "@/lib/data/queries";
 import { demoClips, demoPlaylists } from "@/lib/demo/demo-data";
 import { formatDuration, fullName } from "@/lib/format";
@@ -91,6 +93,9 @@ function FilmRoom() {
   const [activeKey, setActiveKey] = useState(demoPlaylists[0]!.system_key);
   const [realKey, setRealKey] = useState("all");
   const [sourceFilter, setSourceFilter] = useState<"all" | "ai" | "manual">("all");
+  const [savedPlaylistId, setSavedPlaylistId] = useState<string | null>(null);
+  const { data: savedPlaylists = [] } = usePlaylists({ aiOnly: true });
+  const { data: savedClips = [] } = usePlaylistClips(savedPlaylistId ?? undefined);
 
   const filteredClips = useMemo(
     () =>
@@ -106,7 +111,11 @@ function FilmRoom() {
   const playlists = useMemo(() => buildPlaylists(filteredClips), [filteredClips]);
 
   if (realClips.length > 0) {
-    const active = playlists.find((playlist) => playlist.key === realKey) ?? playlists[0]!;
+    const savedPlaylist = savedPlaylists.find((playlist) => playlist.id === savedPlaylistId) ?? null;
+    const active =
+      savedPlaylist && savedClips.length > 0
+        ? { key: `saved-${savedPlaylist.id}`, name: savedPlaylist.name, clips: savedClips }
+        : (playlists.find((playlist) => playlist.key === realKey) ?? playlists[0]!);
     return (
       <AppShell>
         <PageHeader
@@ -137,6 +146,8 @@ function FilmRoom() {
 
         <SharedWithMe />
 
+        <AiPlaylistPrompt onCreated={setSavedPlaylistId} />
+
         <div className="grid gap-6 lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)]">
           <SectionCard title="Playlists" description={`${playlists.length} auto-generated`}>
             <ul className="space-y-1.5">
@@ -144,7 +155,10 @@ function FilmRoom() {
                 <li key={playlist.key}>
                   <button
                     type="button"
-                    onClick={() => setRealKey(playlist.key)}
+                    onClick={() => {
+                      setSavedPlaylistId(null);
+                      setRealKey(playlist.key);
+                    }}
                     className={cn(
                       "grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors",
                       playlist.key === active.key
@@ -158,6 +172,33 @@ function FilmRoom() {
                 </li>
               ))}
             </ul>
+
+            {savedPlaylists.length > 0 ? (
+              <div className="mt-4 border-t border-border pt-3">
+                <p className="label-caps mb-2 text-[10px] text-muted-foreground">
+                  AI organized playlists
+                </p>
+                <ul className="space-y-1.5">
+                  {savedPlaylists.map((playlist) => (
+                    <li key={playlist.id}>
+                      <button
+                        type="button"
+                        onClick={() => setSavedPlaylistId(playlist.id)}
+                        className={cn(
+                          "w-full rounded-lg border px-3 py-2 text-left text-sm transition-colors",
+                          playlist.id === savedPlaylistId
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border bg-surface-2 text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        <span className="block truncate">{playlist.name}</span>
+                        <span className="block truncate text-xs">AI organized</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           </SectionCard>
 
           <div className="space-y-6">
