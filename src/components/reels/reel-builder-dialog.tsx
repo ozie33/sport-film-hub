@@ -18,6 +18,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { REEL_MODES } from "@/lib/ai/review-ai";
 import { useBuildReel } from "@/lib/data/ai-queries";
 import { useGames, usePlayers } from "@/lib/data/queries";
+import { PRODUCT_EVENTS } from "@/lib/analytics/events";
+import { trackEvent } from "@/lib/analytics/track";
 import { fullName } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -44,6 +46,10 @@ export function ReelBuilderDialog({ onCreated }: { onCreated?: (reelId: string) 
   }
 
   function submit() {
+    trackEvent(PRODUCT_EVENTS.buildReelUsed, {
+      playerId: playerId || null,
+      properties: { mode, game_count: gameIds.length, max_clips: maxClips },
+    });
     build.mutate(
       {
         mode,
@@ -54,6 +60,11 @@ export function ReelBuilderDialog({ onCreated }: { onCreated?: (reelId: string) 
       },
       {
         onSuccess: (result) => {
+          trackEvent(PRODUCT_EVENTS.reelCompleted, {
+            playerId: playerId || null,
+            reelId: result.reelId,
+            properties: { mode, clip_count: result.clipCount },
+          });
           toast.success(`AI sequenced ${result.clipCount} of your ${result.reviewedClipCount} reviewed plays`);
           setOpen(false);
           onCreated?.(result.reelId);

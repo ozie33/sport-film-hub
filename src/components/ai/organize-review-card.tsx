@@ -8,6 +8,8 @@ import { Tag } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { AI_SCOPE_DISCLAIMER, reviewedPlaysLabel, type OrganizeResult } from "@/lib/ai/review-ai";
 import { usePlaylists, useOrganizeReview } from "@/lib/data/ai-queries";
+import { PRODUCT_EVENTS } from "@/lib/analytics/events";
+import { trackEvent } from "@/lib/analytics/track";
 
 /**
  * Post-processing on top of an existing review: the AI reads the plays a human
@@ -29,11 +31,23 @@ export function OrganizeReviewCard({
   const existing = result?.playlists ?? null;
 
   function run() {
+    trackEvent(PRODUCT_EVENTS.organizeReviewUsed, {
+      gameId: gameId ?? null,
+      playerId: playerId ?? null,
+      properties: { clip_count: clipCount },
+    });
     organize.mutate(
       { gameId: gameId ?? null, playerId: playerId ?? null },
       {
         onSuccess: (data) => {
           setResult(data);
+          if (data.playlists.length > 0) {
+            trackEvent(PRODUCT_EVENTS.aiPlaylistCreated, {
+              gameId: gameId ?? null,
+              playerId: playerId ?? null,
+              properties: { source: "organize_review", playlists: data.playlists.length },
+            });
+          }
           if (data.playlists.length === 0) toast.error("The AI could not group these plays.");
           else
             toast.success(

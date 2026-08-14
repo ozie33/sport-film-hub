@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { reviewedPlaysLabel } from "@/lib/ai/review-ai";
 import { useGeneratePlaylist } from "@/lib/data/ai-queries";
+import { PRODUCT_EVENTS } from "@/lib/analytics/events";
+import { trackEvent } from "@/lib/analytics/track";
 
 const EXAMPLES = [
   "Show me every play where he attacked the rim",
@@ -35,6 +37,11 @@ export function AiPlaylistPrompt({
       { prompt: trimmed, gameId: gameId ?? null, playerId: playerId ?? null },
       {
         onSuccess: (result) => {
+          trackEvent(PRODUCT_EVENTS.aiPlaylistCreated, {
+            gameId: gameId ?? null,
+            playerId: playerId ?? null,
+            properties: { source: "prompt", clip_count: result.clipCount },
+          });
           toast.success(
             `AI organized ${reviewedPlaysLabel(result.reviewedClipCount)} into "${result.name}" (${result.clipCount} clips)`,
           );

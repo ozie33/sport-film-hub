@@ -1,4 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import {
   LayoutDashboard,
   ClipboardList,
@@ -7,6 +9,7 @@ import {
   TrendingUp,
   Scissors,
   Settings,
+  BarChart3,
 } from "lucide-react";
 
 import {
@@ -21,6 +24,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { isAnalyticsAdminFn } from "@/lib/analytics/analytics.functions";
 
 const primaryItems = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
@@ -39,6 +43,13 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const pathname = useRouterState({ select: (router) => router.location.pathname });
+  const checkAdmin = useServerFn(isAnalyticsAdminFn);
+  const { data: adminCheck } = useQuery({
+    queryKey: ["analytics-admin"],
+    queryFn: () => checkAdmin(),
+    retry: false,
+    staleTime: 5 * 60 * 1000,
+  });
 
   const isActive = (url: string) => pathname === url || pathname.startsWith(`${url}/`);
 
@@ -89,6 +100,27 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        {adminCheck?.isAdmin ? (
+          <SidebarGroup>
+            <SidebarGroupLabel>Internal</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={isActive("/admin/analytics")}
+                    tooltip="Product analytics"
+                  >
+                    <Link to="/admin/analytics" className="flex items-center gap-2">
+                      <BarChart3 className="size-4 shrink-0" />
+                      <span className="truncate">Analytics</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ) : null}
       </SidebarContent>
     </Sidebar>
   );

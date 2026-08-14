@@ -1555,6 +1555,45 @@ export type Database = {
           },
         ]
       }
+      product_events: {
+        Row: {
+          created_at: string
+          event_name: string
+          game_id: string | null
+          id: string
+          occurred_at: string
+          player_id: string | null
+          properties: Json
+          reel_id: string | null
+          session_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_name: string
+          game_id?: string | null
+          id?: string
+          occurred_at?: string
+          player_id?: string | null
+          properties?: Json
+          reel_id?: string | null
+          session_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          event_name?: string
+          game_id?: string | null
+          id?: string
+          occurred_at?: string
+          player_id?: string | null
+          properties?: Json
+          reel_id?: string | null
+          session_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null

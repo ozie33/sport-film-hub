@@ -1,4 +1,5 @@
 import { Brain } from "lucide-react";
+import { useEffect } from "react";
 import { toast } from "sonner";
 
 import { SectionCard } from "@/components/common/stat-card";
@@ -6,6 +7,8 @@ import { Tag } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { AI_SCOPE_DISCLAIMER, reviewedPlaysLabel } from "@/lib/ai/review-ai";
 import { useDevelopmentSummary, useGenerateDevelopmentSummary } from "@/lib/data/ai-queries";
+import { PRODUCT_EVENTS } from "@/lib/analytics/events";
+import { trackEvent } from "@/lib/analytics/track";
 
 /** Cross-game development summary, generated from marked plays only. */
 export function DevelopmentSummaryCard({
@@ -20,6 +23,11 @@ export function DevelopmentSummaryCard({
   const { data: report } = useDevelopmentSummary(playerId);
   const generate = useGenerateDevelopmentSummary();
   const summary = report?.content ?? null;
+
+  useEffect(() => {
+    if (!summary) return;
+    trackEvent(PRODUCT_EVENTS.developmentSummaryViewed, { playerId, oncePerSession: playerId });
+  }, [summary, playerId]);
 
   function run() {
     generate.mutate(
