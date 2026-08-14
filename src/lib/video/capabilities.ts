@@ -134,13 +134,18 @@ export type VideoAdapter = {
 
 /* ------------------------------- upload ------------------------------- */
 
-export const ACCEPTED_UPLOAD_MIME = ["video/mp4", "video/quicktime", "video/x-m4v"];
-export const ACCEPTED_UPLOAD_EXTENSIONS = [".mp4", ".mov", ".m4v"];
+export const ACCEPTED_UPLOAD_MIME = [
+  "video/mp4",
+  "video/quicktime",
+  "video/x-m4v",
+  "video/webm",
+];
+export const ACCEPTED_UPLOAD_EXTENSIONS = [".mp4", ".mov", ".m4v", ".webm"];
 
 export const uploadAdapter: VideoAdapter = {
   key: "upload",
   label: "Upload video",
-  tagline: "MP4, MOV or M4V",
+  tagline: "MP4, MOV, M4V or WEBM",
   description:
     "Upload film you own or are authorized to analyze. Stored privately — full frame access, so it can feed future analysis.",
   enabled: true,
