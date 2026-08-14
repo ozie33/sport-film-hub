@@ -26,7 +26,12 @@ export const DRIVE_SCOPES = [
   "https://www.googleapis.com/auth/drive.readonly",
 ];
 
-export const DRIVE_VIDEO_MIME_TYPES = ["video/mp4", "video/quicktime", "video/x-m4v"];
+export const DRIVE_VIDEO_MIME_TYPES = [
+  "video/mp4",
+  "video/quicktime",
+  "video/x-m4v",
+  "video/webm",
+];
 
 function clientApiKey(): string {
   const key = process.env["GOOGLE_DRIVE_APP_USER_CONNECTOR_CLIENT_API_KEY"];
